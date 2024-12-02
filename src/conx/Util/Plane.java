@@ -5,8 +5,7 @@ import static java.lang.Math.max;
 import static java.lang.Math.round;
 
 public class Plane {
-    public Vector p0, p1, p2, l1, l2, norm, center;
-    public float boundingRadius = 0;
+    public Vector p0, p1, p2, l1, l2, norm;
     public float[] color;
     public int[] simpleColor;
     // Constructor
@@ -30,10 +29,6 @@ public class Plane {
         return norm;
     }
 
-    public Plane setSimpleColor(int[] inColor){
-        this.simpleColor = inColor;
-        return this;
-    }
     public float linearIntersect(Vector origin, Vector lineVector){
         if(Vector.dot(Vector.multiply(lineVector, -1), Vector.cross(l1, l2)) != 0){
             Vector top = Vector.subtract(origin, p0);
@@ -68,16 +63,4 @@ public class Plane {
         return new Plane(p0.rotate(roll, pitch, yaw), p1.rotate(roll, pitch, yaw), p2.rotate(roll, pitch, yaw));
     }
 
-    public void updateBounds(){
-        this.center = Vector.add(p0, p1).add(p2).divide(3);
-        this.boundingRadius = Vector.subtract(this.center, p0).magnitude();
-        float rTest = Vector.subtract(this.center, p1).magnitude();
-        if(rTest > this.boundingRadius){
-            this.boundingRadius = rTest;
-        }
-        rTest = Vector.subtract(this.center, p2).magnitude();
-        if(rTest > this.boundingRadius){
-            this.boundingRadius = rTest;
-        }
-    }
 }

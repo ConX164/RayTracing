@@ -46,7 +46,7 @@ public class Light {
             for(Body body : bodyList){
                 for(Plane plane : body.surfaces){
                     if(plane != parentPlane){
-                        if(plane.linearIntersect(point, lightRay) >= 0){
+                        if(plane.linearIntersect(point, lightRay) >= 0.000001F){
                             continue outerLoop;
                         }
                     }

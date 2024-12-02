@@ -19,7 +19,6 @@ public class Body {
         if(planeList.length > 12) {
             for (Plane plane : planeList) {
                 Plane adjustedPlane = plane.rotate(roll, pitch, yaw).shift(origin).setColor(color);
-                adjustedPlane.updateBounds();
                 surfaces.add(adjustedPlane);
                 float planeRadius = adjustedPlane.distanceFrom(origin);
                 if (planeRadius > this.boundingRadius) {
