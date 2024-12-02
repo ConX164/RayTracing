@@ -4,10 +4,7 @@ import conx.Util.Plane;
 import conx.Util.Vector;
 import conx.Util.rayHemisphere;
 
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.List;
-import java.util.Random;
+import java.util.*;
 
 import static java.lang.Math.*;
 
@@ -23,17 +20,19 @@ class ThreadHandler extends Thread{
             long startTime = System.nanoTime();
             //System.out.println("Start:" + this.threadId());
             int count = 0;
-            int[] samplingColor = new int[3];
+            int[] samplingColor;
             int[] colorMix;
             int sampleSpots = activeCamera.sampling * activeCamera.sampling;
+            HashMap<Plane,int[]> hitPlanes;
             for(int x = 0; x < activeCamera.pixelsX; x++){
                 for(int y = 0; y < activeCamera.pixelsY; y++) {
                     if (!activeCamera.chunkCompletion[x][y]) {
                         activeCamera.chunkCompletion[x][y] = true;
                         colorMix = new int[]{0, 0, 0};
+                        hitPlanes = new HashMap<>();
                         for(int i = 0; i < activeCamera.sampling; i ++) {
                             for(int j = 0; j < activeCamera.sampling; j++) {
-                                samplingColor = activeCamera.advancedRaytrace(x + (float) i /activeCamera.sampling, y + (float) j /activeCamera.sampling, activeCamera.visibleBodies, activeCamera.lightInstances, activeCamera.globalBrightness);
+                                samplingColor = activeCamera.advancedRaytrace(x + (float) i /activeCamera.sampling, y + (float) j /activeCamera.sampling, activeCamera.visibleBodies, activeCamera.lightInstances, activeCamera.globalBrightness, hitPlanes);
                                 colorMix[0] += samplingColor[0];
                                 colorMix[1] += samplingColor[1];
                                 colorMix[2] += samplingColor[2];
@@ -68,7 +67,7 @@ public class Camera {
     float globalBrightness;
     int[][][] canvas;
     boolean[][] chunkCompletion;
-    int sampling = 2;
+    int sampling = 4;
     // Constructor
     public Camera(Vector origin, Vector focus, int pixelsX, int pixelsY){
         this.origin = origin;
@@ -135,34 +134,54 @@ public class Camera {
         }
         return newCapture;
     }
-    public int[] advancedRaytrace(float pixelX, float pixelY, Body[] bodyList, Light[] lightList, float minimumBrightness){
-        float tx = pixelX * (2F / (this.pixelsX -1));
+    public int[] advancedRaytrace(float pixelX, float pixelY, Body[] bodyList, Light[] lightList, float minimumBrightness, HashMap<Plane, int[]> hitPlanes){
+        float tx = pixelX * (2F / (this.pixelsX - 1));
         float ty = pixelY * (2F / (this.pixelsY - 1));
         Vector rayVector = Vector.subtract(Vector.add(Vector.add(Vector.multiply(widthVector, tx), Vector.multiply(heightVector,ty)), this.frameOrigin), this.origin).unit().multiply(1000);
         float lowestT = -1F;
         Plane hitPlane = null;
         float[] pixelColor = {minimumBrightness, minimumBrightness, minimumBrightness};
+        int[] newColor;
 
         float intersectT;
         for(Body body : bodyList){
             if (Vector.shortDistance(rayVector, this.origin, body.origin) <= body.boundingRadius) {
                 for (Plane plane : body.surfaces) {
-                    intersectT = plane.linearIntersect(origin, rayVector);
-                    if ((intersectT >= 0F) && (lowestT >= 0F)) {
-                        if (intersectT < lowestT) {
+                    if(plane.boundingRadius > 0) {
+                        if (Vector.shortDistance(rayVector, this.origin, plane.center) <= plane.boundingRadius) {
+                            intersectT = plane.linearIntersect(origin, rayVector);
+                            if ((intersectT >= 0F) && (lowestT >= 0F)) {
+                                if (intersectT < lowestT) {
+                                    lowestT = intersectT;
+                                    hitPlane = plane;
+                                }
+                            } else if (intersectT >= 0F) {
+                                lowestT = intersectT;
+                                hitPlane = plane;
+                            }
+                        }
+                    }else{
+                        intersectT = plane.linearIntersect(origin, rayVector);
+                        if ((intersectT >= 0F) && (lowestT >= 0F)) {
+                            if (intersectT < lowestT) {
+                                lowestT = intersectT;
+                                hitPlane = plane;
+                            }
+                        } else if (intersectT >= 0F) {
                             lowestT = intersectT;
                             hitPlane = plane;
                         }
-                    } else if (intersectT >= 0F) {
-                        lowestT = intersectT;
-                        hitPlane = plane;
                     }
                 }
             }
         }
         if(hitPlane != null){
+            int[] preColor = hitPlanes.get(hitPlane);
+            if(preColor != null){
+                return preColor;
+            }
             float[] totalColor = new float[]{0,0,0};
-            List<float[]> colorCasts = new ArrayList<float[]>();
+            List<float[]> colorCasts = new ArrayList<>();
             Vector hitPoint = Vector.add(this.origin, Vector.multiply(rayVector, lowestT));
             float occlusionMult = ambientOcclusionRandom(hitPoint,hitPlane,bodyList,rayVector);
             for(Light light : lightList){
@@ -192,12 +211,16 @@ public class Camera {
                 }
             }
             pixelColor = totalColor.clone();
-
+            newColor = new int[]{round(pixelColor[0]*255), round(pixelColor[1]*255), round(pixelColor[2]*255)};
+            hitPlanes.put(hitPlane, newColor);
         }
-        return new int[]{round(pixelColor[0]*255), round(pixelColor[1]*255), round(pixelColor[2]*255)};
+        else {
+            newColor = new int[]{round(pixelColor[0] * 255), round(pixelColor[1] * 255), round(pixelColor[2] * 255)};
+        }
+        return newColor;
     }
     public int[][][] advancedCapture(Body[] visibleBodies, Light[] lightInstances, float globalBrightness){
-        int threadCount = 6;
+        int threadCount = 10;
         ThreadHandler[] threads = new ThreadHandler[threadCount];
         this.visibleBodies = visibleBodies;
         this.lightInstances = lightInstances;

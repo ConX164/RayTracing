@@ -5,7 +5,8 @@ import static java.lang.Math.max;
 import static java.lang.Math.round;
 
 public class Plane {
-    public Vector p0, p1, p2, l1, l2, norm;
+    public Vector p0, p1, p2, l1, l2, norm, center;
+    public float boundingRadius = 0;
     public float[] color;
     public int[] simpleColor;
     // Constructor
@@ -57,10 +58,26 @@ public class Plane {
     }
 
     public Plane shift(Vector offset){
-        return new Plane(Vector.add(p0,offset), Vector.add(p1,offset), Vector.add(p2,offset));
+        p0 = Vector.add(p0,offset);
+        p1 = Vector.add(p1,offset);
+        p2 = Vector.add(p2,offset);
+        return this;
     }
 
     public Plane rotate(float roll, float pitch, float yaw){
         return new Plane(p0.rotate(roll, pitch, yaw), p1.rotate(roll, pitch, yaw), p2.rotate(roll, pitch, yaw));
+    }
+
+    public void updateBounds(){
+        this.center = Vector.add(p0, p1).add(p2).divide(3);
+        this.boundingRadius = Vector.subtract(this.center, p0).magnitude();
+        float rTest = Vector.subtract(this.center, p1).magnitude();
+        if(rTest > this.boundingRadius){
+            this.boundingRadius = rTest;
+        }
+        rTest = Vector.subtract(this.center, p2).magnitude();
+        if(rTest > this.boundingRadius){
+            this.boundingRadius = rTest;
+        }
     }
 }
