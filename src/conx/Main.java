@@ -24,8 +24,8 @@ public class Main {
             int sizeX = size;
             int sizeY = size;
             Camera mainCamera = new Camera(new Vector(-2, -1F, 2.5F), new Vector(0, 0, 0), sizeX, sizeY);
-            int[][][] imageCapture = mainCamera.simpleCapture(bodyWorld.toArray(new Body[0]));
-            //int[][][] imageCapture = mainCamera.advancedCapture(bodyWorld.toArray(new Body[0]), lightWorld.toArray(new Light[0]), 0.2F);//.05F);
+            //int[][][] imageCapture = mainCamera.simpleCapture(bodyWorld.toArray(new Body[0]));
+            int[][][] imageCapture = mainCamera.advancedCapture(bodyWorld.toArray(new Body[0]), lightWorld.toArray(new Light[0]), 0.2F);//.05F);
             Graphics2D g2 = (Graphics2D) g;
             for (int xCount = 0; xCount < sizeX; xCount++) {
                 for (int yCount = 0; yCount < sizeY; yCount++) {

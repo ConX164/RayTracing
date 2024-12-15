@@ -5,6 +5,7 @@ import conx.Util.Vector;
 import conx.Util.rayHemisphere;
 
 import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
 
 import static java.lang.Math.*;
 
@@ -22,22 +23,23 @@ class ThreadHandler extends Thread{
             int[] samplingColor;
             int[] colorMix;
             int sampleSpots = activeCamera.sampling * activeCamera.sampling;
+            int index;
             HashMap<Plane,int[]> hitPlanes;
-            for(int x = 0; x < activeCamera.pixelsX; x++){
-                for(int y = 0; y < activeCamera.pixelsY; y++) {
-                    if (!activeCamera.chunkCompletion[x][y]) {
-                        activeCamera.chunkCompletion[x][y] = true;
+            for (int x = 0; x < activeCamera.pixelsX; x++) {
+                for (int y = 0; y < activeCamera.pixelsY; y++) {
+                    index = x + y * activeCamera.pixelsX;
+                    if (activeCamera.chunkCompletion.putIfAbsent(index, true) == null) {
                         colorMix = new int[]{0, 0, 0};
                         hitPlanes = new HashMap<>();
-                        for(int i = 0; i < activeCamera.sampling; i ++) {
-                            for(int j = 0; j < activeCamera.sampling; j++) {
-                                samplingColor = activeCamera.advancedRaytrace(x + (float) i /activeCamera.sampling, y + (float) j /activeCamera.sampling, activeCamera.visibleBodies, activeCamera.lightInstances, activeCamera.globalBrightness, hitPlanes);
+                        for (int i = 0; i < activeCamera.sampling; i++) {
+                            for (int j = 0; j < activeCamera.sampling; j++) {
+                                samplingColor = activeCamera.advancedRaytrace(x + (float) i / activeCamera.sampling, y + (float) j / activeCamera.sampling, activeCamera.visibleBodies, activeCamera.lightInstances, activeCamera.globalBrightness, hitPlanes);
                                 colorMix[0] += samplingColor[0];
                                 colorMix[1] += samplingColor[1];
                                 colorMix[2] += samplingColor[2];
                             }
                         }
-                        activeCamera.canvas[x][y] = new int[]{colorMix[0] / sampleSpots,colorMix[1] / sampleSpots,colorMix[2] / sampleSpots};
+                        activeCamera.canvas[x][y] = new int[]{colorMix[0] / sampleSpots, colorMix[1] / sampleSpots, colorMix[2] / sampleSpots};
                         count++;
                     }
                 }
@@ -65,7 +67,8 @@ public class Camera {
     Light[] lightInstances;
     float globalBrightness, xMult, yMult;
     int[][][] canvas;
-    boolean[][] chunkCompletion;
+    ConcurrentHashMap<Integer, Boolean> chunkCompletion = new ConcurrentHashMap<>();
+
     int sampling = 4;
     // Constructor
     public Camera(Vector origin, Vector focus, int pixelsX, int pixelsY){
@@ -76,7 +79,6 @@ public class Camera {
         this.xMult =  (2F / (pixelsX - 1));
         this.yMult =  (2F / (pixelsY - 1));
         this.canvas = new int[pixelsX][pixelsY][3];
-        this.chunkCompletion = new boolean[pixelsX][pixelsY];
         this.targetVector = new Vector((focus.x - origin.x), (focus.y - origin.y), (focus.z - origin.z)).unit();
         this.widthVector = Vector.cross(targetVector, verticalVector).multiply(-1).unit();
         this.heightVector = Vector.cross(targetVector, this.widthVector).multiply(-1).unit();

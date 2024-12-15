@@ -2,12 +2,13 @@ package conx.Util;
 
 
 import static java.lang.Math.max;
-import static java.lang.Math.round;
+import static java.lang.Math.min;
 
 public class Plane {
     public Vector p0, p1, p2, l1, l2, norm;
     public float[] color;
     public int[] simpleColor;
+    private float[][] bounds;
     // Constructor
     public Plane(Vector p0, Vector p1, Vector p2){
         this.color = new float[]{0.4F,0.4F,0.4F};
@@ -27,6 +28,13 @@ public class Plane {
             return Vector.multiply(norm,-1);
         }
         return norm;
+    }
+
+    public float[][] bounds(){
+        if(this.bounds == null){
+            this.bounds = new float[][]{{min(p0.x ,min(p1.x, p2.x)), max(p0.x ,max(p1.x, p2.x))}, {min(p0.y ,min(p1.y, p2.y)), max(p0.y ,max(p1.y, p2.y))}, {min(p0.z ,min(p1.z, p2.z)), max(p0.z ,max(p1.z, p2.z))}};
+        }
+        return this.bounds;
     }
 
     public float linearIntersect(Vector origin, Vector lineVector){
