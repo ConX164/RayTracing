@@ -52,9 +52,13 @@ public class Vector {
     }
     public Vector unit(){
         if(this.unit == null){
-            this.unit = new Vector(this.x / this.magnitude(), this.y / this.magnitude(), this.z / this.magnitude());
+            if(this.magnitude() == 0){
+                this.unit = new Vector(0,0,0);
+            }else {
+                this.unit = new Vector(this.x / this.magnitude(), this.y / this.magnitude(), this.z / this.magnitude());
+            }
         }
-        return(this.unit);
+        return this.unit;
     }
     public float[] toArray(){
         return new float[]{this.x, this.y, this.z};

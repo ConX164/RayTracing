@@ -10,7 +10,7 @@ public class rayHemisphere {
     public static List<float[]> hemiPoints;
     static Random rand = new Random();
     static float PI2 = (float) (2 * PI);
-    static int divisions = 6;
+    public static int divisions = 6;
     static float zSpacing = 1F / divisions;
     static float oSpacing = PI2 / (4 * divisions);
     static float[] zList = new float[divisions];
@@ -42,7 +42,7 @@ public class rayHemisphere {
         hemiPoints = new ArrayList<>();
         for(int i = 0; i < divisionsLQ; i++){
             for(int j = 0; j < divisionsLQ * 4; j++){
-                float z = zListLQ[i];
+                float z = -zListLQ[i];
                 float r = size * (float) sqrt(1 - z*z);
                 float o = oListLQ[j];
                 float x = (float) cos(o);
@@ -62,7 +62,7 @@ public class rayHemisphere {
                 float o = oList[j] + oSpacing*rand.nextFloat();
                 float x = (float) cos(o);
                 float y = (float) (o>PI ? -sqrt(1 - x * x) : sqrt(1 - x * x));
-                newList.add(new float[]{r * x, r * y, size * z});
+                newList.add(new float[]{r * x, r * y, size * -z});
             }
         }
         return newList;

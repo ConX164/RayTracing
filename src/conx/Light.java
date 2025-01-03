@@ -42,17 +42,18 @@ public class Light {
         outerLoop:
         for(float[] source : this.lightPoints){
             Vector circlePoint = Vector.add(origin,Vector.add(Vector.multiply(v1,source[0]), Vector.multiply(v2,source[1])));
-            Vector lightRay = Vector.subtract(circlePoint, point);
+            Vector lightRay = Vector.subtract(point, circlePoint);
             for(Body body : bodyList){
                 for(Plane plane : body.surfaces){
                     if(plane != parentPlane){
+                        if((body == parentPlane.parent) && (plane.n0 != null) && (-Vector.dot(plane.nAvg, lightRay) > 0)){continue;}
                         if(plane.linearIntersect(point, lightRay) >= 0.000001F){
                             continue outerLoop;
                         }
                     }
                 }
             }
-            visibility += Vector.dot(lightRay.unit(), parentPlane.correctedNormal(cameraRay).unit());
+            visibility += -Vector.dot(lightRay.unit(), parentPlane.correctedNormal(cameraRay, point).unit());
         }
         return (this.strength * visibility) / (mainRay.magnitude() * mainRay.magnitude() * this.amount);
     }

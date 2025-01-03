@@ -1,44 +1,63 @@
 package conx;
 
+import conx.BadIdeas.Boundary;
 import conx.Util.Plane;
+import conx.BadIdeas.Region;
 import conx.Util.Vector;
+import conx.Util.rayHemisphere;
 
 import java.util.ArrayList;
 import java.util.List;
 import static java.lang.Math.*;
 
 public class Body {
-    public List<Plane> surfaces = new ArrayList<Plane> ();
-    public int[] color = {0,0,0};
+    public List<Plane> surfaces = new ArrayList<> ();
+    public int[] color;
+    public boolean smooth = false;
     public float boundingRadius = 0;
     public Vector origin;
     // Constructor
     public Body(Vector origin, Plane[] planeList, int[] color, float roll, float pitch, float yaw){
         this.color = color.clone();
         this.origin = origin;
-        if(planeList.length > 12) {
-            for (Plane plane : planeList) {
-                Plane adjustedPlane = plane.rotate(roll, pitch, yaw).shift(origin).setColor(color);
-                surfaces.add(adjustedPlane);
-                float planeRadius = adjustedPlane.distanceFrom(origin);
-                if (planeRadius > this.boundingRadius) {
-                    this.boundingRadius = planeRadius;
-                }
-            }
-        }
-        else{
-            for (Plane plane : planeList) {
-                Plane adjustedPlane = plane.rotate(roll, pitch, yaw).shift(origin).setColor(color);
-                surfaces.add(adjustedPlane);
-                float planeRadius = adjustedPlane.distanceFrom(origin);
-                if (planeRadius > this.boundingRadius) {
-                    this.boundingRadius = planeRadius;
-                }
+        for (Plane plane : planeList) {
+            Plane adjustedPlane = plane.rotate(roll, pitch, yaw).shift(origin).setColor(color).finish();
+            adjustedPlane.parent = this;
+            surfaces.add(adjustedPlane);
+            float planeRadius = adjustedPlane.distanceFrom(origin);
+            if (planeRadius > this.boundingRadius) {
+                this.boundingRadius = planeRadius;
             }
         }
     }
+    public Body setSmooth(){
+        if(surfaces.getFirst().n0Hold != null){
+            for (Plane plane : surfaces) {
+                if(plane.n0Hold != null) {
+                    plane.n0 = plane.n0Hold;
+                    plane.n1 = plane.n1Hold;
+                    plane.n2 = plane.n2Hold;
+                    plane.nAvg = Vector.add(plane.n0, plane.n1).add(plane.n2).divide(3F).unit();
+                }
+            }
+        }else {
+            for (Plane plane : surfaces) {
+                plane.centerNormals(this.origin);
+            }
+        }
+        return this;
+    }
+    public Body setRoughness(float roughness){
+        float specular = 4F / (float) pow(roughness, 2.3);
+        int modifier = 0;//(int)((/*-0.62996*cbrt(roughness - 0.5) + 0.5*/0) * rayHemisphere.divisions) * (rayHemisphere.divisions * 4);
+        for(Plane plane : this.surfaces){
+            plane.specular = specular;
+            plane.occlusionModifier = modifier;
+        }
+        return this;
+    }
     // Static methods
-    public static Body cube(Vector origin, float size, int[] color){ // Deprecated
+    /*public static Body cube(Vector origin, float size, int[] color){ // Deprecated
         Plane[] cubePlanes = {
                 new Plane(Vector.multiply(new Vector(0,0,0), size), Vector.multiply(new Vector(1,0,0), size), Vector.multiply(new Vector(0,1,0), size)),
                 new Plane(Vector.multiply(new Vector(1,1,0), size), Vector.multiply(new Vector(1,0,0), size), Vector.multiply(new Vector(0,1,0), size)),
@@ -53,9 +72,9 @@ public class Body {
                 new Plane(Vector.multiply(new Vector(1,0,0), size), Vector.multiply(new Vector(1,1,0), size), Vector.multiply(new Vector(1,0,1), size)),
                 new Plane(Vector.multiply(new Vector(1,1,1), size), Vector.multiply(new Vector(1,1,0), size), Vector.multiply(new Vector(1,0,1), size))
         };
-        return new Body(origin, cubePlanes, color, 0, 0, 0);
-    }
-    public static Body plane(Vector origin, float scaleX, float scaleY, int[] color, float roll, float pitch, float yaw){
+        return new Body(origin, cubePlanes, color, 0, 0, 0, false);
+    }*/
+    public static Body plane(Vector origin, float scaleX, float scaleY, int[] color,float roll, float pitch, float yaw){
         Vector xy = new Vector(scaleX*0.5F,scaleY*0.5F,0);
         Vector x_y = new Vector(-scaleX*0.5F,scaleY*0.5F,0);
         Vector xy_ = new Vector(scaleX*0.5F,-scaleY*0.5F,0);
@@ -142,8 +161,8 @@ public class Body {
         }
         int indexCount = 0;
         for(int i = 0; i < segments; i++){
-            cylinderPlanes[indexCount] = new Plane(circlePoints[0][i], circlePoints[0][i+1], circlePoints[1][i]);
-            cylinderPlanes[indexCount + 1] = new Plane(circlePoints[1][i+1], circlePoints[0][i+1], circlePoints[1][i]);
+            cylinderPlanes[indexCount] = new Plane(circlePoints[0][i], circlePoints[0][i+1], circlePoints[1][i]).setNormals(new Vector(circlePoints[0][i].x, circlePoints[0][i].y, 0), new Vector(circlePoints[0][i+1].x, circlePoints[0][i+1].y, 0), new Vector(circlePoints[1][i].x, circlePoints[1][i].y, 0));
+            cylinderPlanes[indexCount + 1] = new Plane(circlePoints[1][i+1], circlePoints[0][i+1], circlePoints[1][i]).setNormals(new Vector(circlePoints[1][i+1].x, circlePoints[1][i+1].y, 0), new Vector(circlePoints[0][i+1].x, circlePoints[0][i+1].y, 0), new Vector(circlePoints[1][i].x, circlePoints[1][i].y, 0));
             indexCount += 2;
         }
         for(int i = 1; i < segments - 1; i++){
@@ -158,12 +177,17 @@ public class Body {
         Vector[] circlePoints = new Vector[segments + 1];
         Vector tip = new Vector(0,0,height*0.5F);
         float thetaOffset = (float) (2*PI / segments);
+        float normalHeight = radius * radius / height;
         for(int i = 0; i < segments + 1; i++){
             circlePoints[i] = new Vector((float) (radius*cos(i*thetaOffset)), (float) (radius*sin(i*thetaOffset)),height * -0.5F);
         }
         int indexCount = 0;
+        Vector n1, n2, n3;
         for(int i = 0; i < segments; i++, indexCount++){
-            conePlanes[indexCount] = new Plane(circlePoints[i], circlePoints[i+1], tip);
+            n1 = new Vector(circlePoints[i].x, circlePoints[i].y, normalHeight);
+            n2 = new Vector(circlePoints[i+1].x, circlePoints[i+1].y, normalHeight);
+            n3 = new Vector(0F,0F,0F);
+            conePlanes[indexCount] = new Plane(circlePoints[i], circlePoints[i+1], tip).setNormals(n1.unit(), n2.unit(), n3.unit());
         }
         for(int i = 1; i < segments - 1; i++, indexCount++){
             conePlanes[indexCount] = new Plane(circlePoints[0], circlePoints[i], circlePoints[i+1]);
@@ -171,16 +195,17 @@ public class Body {
         return new Body(origin, conePlanes, color, roll, pitch, yaw);
     }
     // Overloading
-    public static Body box(Vector origin, float scaleX, float scaleY, float scaleZ, int[] color){
-        return box(origin, scaleX, scaleY, scaleZ, color, 0F, 0F, 0F);
-    }
     public static Body plane(Vector origin, float scaleX, float scaleY, int[] color){
         return plane(origin, scaleX, scaleY, color, 0, 0, 0);
     }
-    public static Body sphere(Vector origin, float radius, int segments, int rings, int[] color){
-        return sphere(origin, radius, segments, rings, color, 0, 0, 0);
+    public static Body box(Vector origin, float scaleX, float scaleY, float scaleZ, int[] color){
+        return box(origin, scaleX, scaleY, scaleZ, color,0F, 0F, 0F);
     }
-    public static Body cylinder(Vector origin, float radius, float height, int segments, int[] color){
+    public static Body sphere(Vector origin, float radius, int segments, int rings, int[] color){
+        return sphere(origin, radius, segments, rings, color,0, 0, 0);
+    }
+
+    public static Body cylinder(Vector origin, float radius, float height, int segments, int[] color) {
         return cylinder(origin, radius, height, segments, color, 0, 0, 0);
     }
     public static Body cone(Vector origin, float radius, float height, int segments, int[] color){

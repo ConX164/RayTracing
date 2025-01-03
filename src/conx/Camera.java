@@ -1,8 +1,9 @@
 package conx;
 
-import conx.Util.Plane;
+import conx.BadIdeas.Boundary;
+import conx.BadIdeas.Region;
+import conx.Util.*;
 import conx.Util.Vector;
-import conx.Util.rayHemisphere;
 
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
@@ -62,10 +63,10 @@ public class Camera {
     Vector frameOrigin, targetVector, heightVector, widthVector;
     int pixelsX, pixelsY;
     static final Vector verticalVector = new Vector(0,0,1);
-    static Random rand = new Random();
     Body[] visibleBodies;
     Light[] lightInstances;
     float globalBrightness, xMult, yMult;
+    float iorLevel = 0.5F /  (float) (10*PI);
     int[][][] canvas;
     ConcurrentHashMap<Integer, Boolean> chunkCompletion = new ConcurrentHashMap<>();
 
@@ -130,7 +131,7 @@ public class Camera {
     public int[] advancedRaytrace(float pixelX, float pixelY, Body[] bodyList, Light[] lightList, float minimumBrightness, HashMap<Plane, int[]> hitPlanes){
         float tx = pixelX * xMult;
         float ty = pixelY * yMult;
-        Vector rayVector = Vector.subtract(Vector.add(Vector.add(Vector.multiply(widthVector, tx), Vector.multiply(heightVector,ty)), this.frameOrigin), this.origin).unit().multiply(1000);
+        Vector rayVector = Vector.subtract(Vector.add(Vector.add(Vector.multiply(widthVector, tx), Vector.multiply(heightVector,ty)), this.frameOrigin), this.origin).unit().multiply(-1000);
         float lowestT = -1F;
         Plane hitPlane = null;
         float[] pixelColor = {minimumBrightness, minimumBrightness, minimumBrightness};
@@ -140,32 +141,37 @@ public class Camera {
         for(Body body : bodyList){
             if (Vector.shortDistance(rayVector, this.origin, body.origin) <= body.boundingRadius) {
                 for (Plane plane : body.surfaces) {
-                    intersectT = plane.linearIntersect(origin, rayVector);
-                    if (intersectT >= 0F) {
-                        if (intersectT < lowestT || lowestT < 0F) {
-                            lowestT = intersectT;
-                            hitPlane = plane;
+                    if (Vector.shortDistance(rayVector, this.origin, plane.center) <= plane.radius) {
+                        intersectT = plane.linearIntersect(origin, rayVector);
+                        if (intersectT >= 0F) {
+                            if (intersectT < lowestT || lowestT < 0F) {
+                                lowestT = intersectT;
+                                hitPlane = plane;
+                            }
                         }
                     }
                 }
             }
         }
+        if(hitPlanes.get(hitPlane) != null){
+            return hitPlanes.get(hitPlane);
+        }
         if(hitPlane != null){
-            int[] preColor = hitPlanes.get(hitPlane);
-            if(preColor != null){
-                return preColor;
-            }
             float[] totalColor = new float[3];
             List<float[]> colorCasts = new ArrayList<>();
-            Vector hitPoint = Vector.add(this.origin, Vector.multiply(rayVector, lowestT));
-            float occlusionEstimate = ambientOcclusionDetect(hitPoint,hitPlane,bodyList,rayVector);
+            Vector hitPoint = Vector.add(this.origin, Vector.multiply(rayVector, -lowestT));
+            Vector planeNorm = hitPlane.correctedNormal(rayVector, hitPoint).unit();
+            float occlusionEstimate = ambientOcclusionDetect(hitPoint,hitPlane,bodyList,planeNorm);
             float occlusionMult = minimumBrightness;
-            if(occlusionEstimate < 1F) {
-                occlusionMult = ambientOcclusionRandom(hitPoint, hitPlane, bodyList, rayVector) * minimumBrightness;
+            if(occlusionEstimate == 0) {
+                occlusionMult = ambientOcclusionRandom(hitPoint, hitPlane, bodyList, planeNorm) * minimumBrightness;
             }
+            float iorMult = hitPlane.iorTotal(this.iorLevel);
             for(Light light : lightList){
                 float multiplier = light.illumination(hitPoint,hitPlane,bodyList,rayVector);
-                colorCasts.add(new float[]{hitPlane.color[0] * multiplier * light.color[0], hitPlane.color[1] * multiplier * light.color[1], hitPlane.color[2] * multiplier * light.color[2]});
+                Vector reflection = Vector.add(rayVector.unit(), (Vector.multiply(planeNorm, -2F*Vector.dot(planeNorm, rayVector.unit()))));
+                float specular = iorMult * multiplier * (float) pow(max(Vector.dot(reflection, Vector.subtract(hitPoint, light.origin).unit()), 0), hitPlane.specular);
+                colorCasts.add(new float[]{light.color[0]*(multiplier*hitPlane.color[0] + specular), light.color[1]*(multiplier*hitPlane.color[1] + specular), light.color[2]*(multiplier*hitPlane.color[2] + specular)});
             }
             colorCasts.add(new float[]{hitPlane.color[0] * occlusionMult, hitPlane.color[1] * occlusionMult, hitPlane.color[2] * occlusionMult});
             for(float[] color : colorCasts){
@@ -186,11 +192,11 @@ public class Camera {
                 totalColor[2] = 1.0F;
             }
             newColor = new int[]{round(totalColor[0]*255), round(totalColor[1]*255), round(totalColor[2]*255)};
-            hitPlanes.put(hitPlane, newColor);
         }
         else {
             newColor = new int[]{round(pixelColor[0] * 255), round(pixelColor[1] * 255), round(pixelColor[2] * 255)};
         }
+        hitPlanes.put(hitPlane, newColor);
         return newColor;
     }
 
@@ -219,57 +225,63 @@ public class Camera {
         return canvas;
     }
 
-    private static float ambientOcclusionDetect(Vector point, Plane parentPlane, Body[] bodyList, Vector cameraRay){
+    private static int ambientOcclusionDetect(Vector point, Plane parentPlane, Body[] bodyList, Vector vk){
         List<float[]> hemiPoints = rayHemisphere.hemiPoints;
-        int visiblility = hemiPoints.size();
-        Vector vi = Vector.subtract(parentPlane.p1,parentPlane.p2).unit();
-        Vector vk = parentPlane.correctedNormal(cameraRay).unit();
+        Vector vTemp = Vector.subtract(parentPlane.p1,parentPlane.p2).unit();
+        Vector vi = Vector.cross(vk,vTemp).unit();
         Vector vj = Vector.cross(vk,vi).unit();
-
-        outerLoop:
         for(float[] source : hemiPoints){
             Vector occlusionRay = Vector.add(Vector.multiply(vi, source[0]), Vector.multiply(vj, source[1])).add(Vector.multiply(vk, source[2]));
             for(Body body : bodyList){
                 if (Vector.shortDistance(occlusionRay, point, body.origin) <= body.boundingRadius) {
                     for (Plane plane : body.surfaces) {
                         if (plane != parentPlane) {
-                            if (plane.linearIntersect(point, occlusionRay) >= 0.000001F) {
-                                visiblility--;
-                                continue outerLoop;
+                            if((body == parentPlane.parent) && (plane.n0 != null) && (Vector.dot(plane.nAvg, occlusionRay) < 0)){continue;}
+                            if (Vector.shortDistance(occlusionRay, point, plane.center) <= plane.radius) {
+                                if (plane.linearIntersect(point, occlusionRay) >= 0.000001F) {
+                                    return 0;
+                                }
                             }
                         }
                     }
                 }
             }
         }
-        return (float) visiblility / (float) hemiPoints.size();
+        return 1;
     }
 
-    private static float ambientOcclusionRandom(Vector point, Plane parentPlane, Body[] bodyList, Vector cameraRay){
+    private static float ambientOcclusionRandom(Vector point, Plane parentPlane, Body[] bodyList, Vector vk){
         List<float[]> hemiPoints = rayHemisphere.adjustedRandom();
-        int visiblility = hemiPoints.size();
+        int visiblility = hemiPoints.size();// - parentPlane.occlusionModifier;
         float strength = 1.2F;
-        Vector vi = Vector.subtract(parentPlane.p1,parentPlane.p2).unit();
-        Vector vk = parentPlane.correctedNormal(cameraRay).unit();
+        Vector vTemp = Vector.subtract(parentPlane.p1,parentPlane.p2).unit();
+        Vector vi = Vector.cross(vk,vTemp).unit();
         Vector vj = Vector.cross(vk,vi).unit();
-
+        //int i = 0;
         outerLoop:
         for(float[] source : hemiPoints){
+            /*if(i < parentPlane.occlusionModifier){
+                i++;
+                continue;
+            }*/
             Vector occlusionRay = Vector.add(Vector.multiply(vi, source[0]), Vector.multiply(vj, source[1])).add(Vector.multiply(vk, source[2]));
             for(Body body : bodyList){
                 if (Vector.shortDistance(occlusionRay, point, body.origin) <= body.boundingRadius) {
                     for (Plane plane : body.surfaces) {
                         if (plane != parentPlane) {
-                            if (plane.linearIntersect(point, occlusionRay) >= 0.000001F) {
-                                visiblility--;
-                                continue outerLoop;
+                            if((body == parentPlane.parent) && (plane.n0 != null) && (Vector.dot(plane.nAvg, occlusionRay) < 0)){continue;}
+                            if (Vector.shortDistance(occlusionRay, point, plane.center) <= plane.radius) {
+                                if (plane.linearIntersect(point, occlusionRay) >= 0.000001F) {
+                                    visiblility--;
+                                    continue outerLoop;
+                                }
                             }
                         }
                     }
                 }
             }
         }
-        float occlusion = (float) visiblility / (float) hemiPoints.size();
+        float occlusion = (float) visiblility / ((float)hemiPoints.size());// - parentPlane.occlusionModifier);
         return (float) pow(occlusion, strength);
     }
 }
