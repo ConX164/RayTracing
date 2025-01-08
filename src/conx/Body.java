@@ -1,8 +1,6 @@
 package conx;
 
-import conx.BadIdeas.Boundary;
 import conx.Util.Plane;
-import conx.BadIdeas.Region;
 import conx.Util.Vector;
 import conx.Util.rayHemisphere;
 

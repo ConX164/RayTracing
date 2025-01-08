@@ -1,7 +1,5 @@
 package conx;
 
-import conx.BadIdeas.Boundary;
-import conx.BadIdeas.Region;
 import conx.Util.*;
 import conx.Util.Vector;
 
@@ -72,7 +70,7 @@ public class Camera {
 
     int sampling = 4;
     // Constructor
-    public Camera(Vector origin, Vector focus, int pixelsX, int pixelsY){
+    public Camera(Vector origin, Vector focus, int pixelsX, int pixelsY, int focalLength){
         this.origin = origin;
         this.focus = focus;
         this.pixelsX = pixelsX;
@@ -81,9 +79,9 @@ public class Camera {
         this.yMult =  (2F / (pixelsY - 1));
         this.canvas = new int[pixelsX][pixelsY][3];
         this.targetVector = new Vector((focus.x - origin.x), (focus.y - origin.y), (focus.z - origin.z)).unit();
-        this.widthVector = Vector.cross(targetVector, verticalVector).multiply(-1).unit();
-        this.heightVector = Vector.cross(targetVector, this.widthVector).multiply(-1).unit();
-        this.frameOrigin = Vector.add(origin, Vector.subtract(this.targetVector, Vector.add(this.widthVector, this.heightVector)));
+        this.widthVector = Vector.cross(targetVector, verticalVector).unit();
+        this.heightVector = Vector.cross(targetVector, this.widthVector).unit();
+        this.frameOrigin =  Vector.multiply(targetVector,((float)focalLength) / 18F).add(origin);
         System.out.println(Arrays.toString(targetVector.toArray()));
         System.out.println(Arrays.toString(widthVector.toArray()));
         System.out.println(Arrays.toString(heightVector.toArray()));
@@ -129,8 +127,8 @@ public class Camera {
     }
 
     public int[] advancedRaytrace(float pixelX, float pixelY, Body[] bodyList, Light[] lightList, float minimumBrightness, HashMap<Plane, int[]> hitPlanes){
-        float tx = pixelX * xMult;
-        float ty = pixelY * yMult;
+        float tx = (pixelX - (this.pixelsX)/2F) * xMult;
+        float ty = (pixelY - (this.pixelsY)/2F) * yMult;
         Vector rayVector = Vector.subtract(Vector.add(Vector.add(Vector.multiply(widthVector, tx), Vector.multiply(heightVector,ty)), this.frameOrigin), this.origin).unit().multiply(-1000);
         float lowestT = -1F;
         Plane hitPlane = null;
@@ -211,7 +209,7 @@ public class Camera {
     }
 
     public int[][][] advancedCapture(Body[] visibleBodies, Light[] lightInstances, float globalBrightness){
-        int threadCount = 6;
+        int threadCount = 8;
         ThreadHandler[] threads = new ThreadHandler[threadCount];
         this.visibleBodies = visibleBodies;
         this.lightInstances = lightInstances;

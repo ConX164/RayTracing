@@ -23,7 +23,7 @@ public class Main {
             System.out.println("start");
             int sizeX = size;
             int sizeY = size;
-            Camera mainCamera = new Camera(new Vector(-2, -1F, 2.5F), new Vector(0, 0, 0), sizeX, sizeY);
+            Camera mainCamera = new Camera(new Vector(-2.6F, -1.4F, 2.9F), new Vector(0, 0, 0), sizeX, sizeY, 26);
             //int[][][] imageCapture = mainCamera.simpleCapture(bodyWorld.toArray(new Body[0]));
             int[][][] imageCapture = mainCamera.advancedCapture(bodyWorld.toArray(new Body[0]), lightWorld.toArray(new Light[0]), 0.2F);//.05F);
             Graphics2D g2 = (Graphics2D) g;
