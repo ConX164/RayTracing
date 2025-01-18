@@ -9,10 +9,10 @@ import java.util.concurrent.ConcurrentHashMap;
 import static java.lang.Math.*;
 
 // Threading
-class ThreadHandler extends Thread{
+class renderThread extends Thread{
     final Camera activeCamera;
 
-    public ThreadHandler(Camera activeCamera){
+    public renderThread(Camera activeCamera){
         this.activeCamera = activeCamera;
     }
     public void run(){
@@ -53,7 +53,6 @@ class ThreadHandler extends Thread{
             throw e;
         }
     }
-
 }
 
 public class Camera {
@@ -67,6 +66,8 @@ public class Camera {
     float iorLevel = 0.5F /  (float) (10*PI);
     int[][][] canvas;
     ConcurrentHashMap<Integer, Boolean> chunkCompletion = new ConcurrentHashMap<>();
+    ConcurrentHashMap<Plane, Boolean> planeCompletion = new ConcurrentHashMap<>();
+    List<Plane>[][] raster;
 
     int sampling = 4;
     // Constructor
@@ -82,6 +83,12 @@ public class Camera {
         this.widthVector = Vector.cross(targetVector, verticalVector).unit();
         this.heightVector = Vector.cross(targetVector, this.widthVector).unit();
         this.frameOrigin =  Vector.multiply(targetVector,((float)focalLength) / 18F).add(origin);
+        this.raster  = new ArrayList[this.pixelsY][this.pixelsX];
+        for(int i = 0; i < this.pixelsY; i++){
+            for(int j = 0; j < this.pixelsX; j++){
+                this.raster[i][j] = new ArrayList<>();
+            }
+        }
         System.out.println(Arrays.toString(targetVector.toArray()));
         System.out.println(Arrays.toString(widthVector.toArray()));
         System.out.println(Arrays.toString(heightVector.toArray()));
@@ -136,7 +143,16 @@ public class Camera {
         int[] newColor;
 
         float intersectT;
-        for(Body body : bodyList){
+        for(Plane plane : this.raster[(int) pixelY][(int) pixelX]){
+            intersectT = plane.linearIntersect(origin, rayVector);
+            if (intersectT >= 0F) {
+                if (intersectT < lowestT || lowestT < 0F) {
+                    lowestT = intersectT;
+                    hitPlane = plane;
+                }
+            }
+        }
+        /*for(Body body : bodyList){
             if (Vector.shortDistance(rayVector, this.origin, body.origin) <= body.boundingRadius) {
                 for (Plane plane : body.surfaces) {
                     if (Vector.shortDistance(rayVector, this.origin, plane.center) <= plane.radius) {
@@ -150,7 +166,7 @@ public class Camera {
                     }
                 }
             }
-        }
+        }*/
         if(hitPlanes.get(hitPlane) != null){
             return hitPlanes.get(hitPlane);
         }
@@ -176,6 +192,14 @@ public class Camera {
                 totalColor[0] += color[0];
                 totalColor[1] += color[1];
                 totalColor[2] += color[2];
+            }
+            if(hitPlane.roughness < 0.5F){
+                float[] relectColor = reflect(bodyList, lightList, minimumBrightness, rayVector, hitPoint, hitPlane);
+                float reflectionWeight = 0.15F - hitPlane.roughness/3.3333F;
+                float baseWeight = 1 - reflectionWeight;
+                totalColor[0] = totalColor[0] * baseWeight + relectColor[0] * reflectionWeight;
+                totalColor[1] = totalColor[1] * baseWeight + relectColor[1] * reflectionWeight;
+                totalColor[2] = totalColor[2] * baseWeight + relectColor[2] * reflectionWeight;
             }
             totalColor[0] = (float) pow(1.0F - exp(totalColor[0] * -1.4F), 0.8333333333333333F);
             totalColor[1] = (float) pow(1.0F - exp(totalColor[1] * -1.4F), 0.8333333333333333F);
@@ -209,17 +233,25 @@ public class Camera {
     }
 
     public int[][][] advancedCapture(Body[] visibleBodies, Light[] lightInstances, float globalBrightness){
-        int threadCount = 8;
-        ThreadHandler[] threads = new ThreadHandler[threadCount];
+        int threadCount = 7;
+        renderThread[] renderThreads = new renderThread[threadCount];
         this.visibleBodies = visibleBodies;
         this.lightInstances = lightInstances;
         this.globalBrightness = globalBrightness;
 
-        for(int i = 0; i < threadCount; i++){
-            threads[i] = new ThreadHandler(this);
-            threads[i].start();
+        for(Body body : visibleBodies){
+            for(Plane plane : body.surfaces){
+                this.planeCompletion.put(plane, false);
+            }
         }
-        for(int i = 0; i < threadCount; i++){try {threads[i].join();} catch (InterruptedException ignored) {}}
+
+        rasterize();
+
+        for(int i = 0; i < threadCount; i++){
+            renderThreads[i] = new renderThread(this);
+            renderThreads[i].start();
+        }
+        for(int i = 0; i < threadCount; i++){try {renderThreads[i].join();} catch (InterruptedException ignored) {}}
         return canvas;
     }
 
@@ -232,12 +264,20 @@ public class Camera {
             Vector occlusionRay = Vector.add(Vector.multiply(vi, source[0]), Vector.multiply(vj, source[1])).add(Vector.multiply(vk, source[2]));
             for(Body body : bodyList){
                 if (Vector.shortDistance(occlusionRay, point, body.origin) <= body.boundingRadius) {
-                    for (Plane plane : body.surfaces) {
-                        if (plane != parentPlane) {
-                            if((body == parentPlane.parent) && (plane.n0 != null) && (Vector.dot(plane.nAvg, occlusionRay) < 0)){continue;}
-                            if (Vector.shortDistance(occlusionRay, point, plane.center) <= plane.radius) {
-                                if (plane.linearIntersect(point, occlusionRay) >= 0.000001F) {
-                                    return 0;
+                    for(Plane[] planeList : body.planeChunks.keySet()){
+                        float[] data = body.planeChunks.get(planeList);
+                        Vector center = new Vector(data[0], data[1], data[2]);
+                        if (Vector.shortDistance(occlusionRay, point, center) <= data[3] + 0.000001F) {
+                            for (Plane plane : planeList) {
+                                if (plane != parentPlane) {
+                                    if ((body == parentPlane.parent) && (plane.n0 != null) && (Vector.dot(plane.nAvg, occlusionRay) < 0)) {
+                                        continue;
+                                    }
+                                    if (Vector.shortDistance(occlusionRay, point, plane.center) <= plane.radius) {
+                                        if (plane.linearIntersect(point, occlusionRay) >= 0.000001F) {
+                                            return 0;
+                                        }
+                                    }
                                 }
                             }
                         }
@@ -265,13 +305,21 @@ public class Camera {
             Vector occlusionRay = Vector.add(Vector.multiply(vi, source[0]), Vector.multiply(vj, source[1])).add(Vector.multiply(vk, source[2]));
             for(Body body : bodyList){
                 if (Vector.shortDistance(occlusionRay, point, body.origin) <= body.boundingRadius) {
-                    for (Plane plane : body.surfaces) {
-                        if (plane != parentPlane) {
-                            if((body == parentPlane.parent) && (plane.n0 != null) && (Vector.dot(plane.nAvg, occlusionRay) < 0)){continue;}
-                            if (Vector.shortDistance(occlusionRay, point, plane.center) <= plane.radius) {
-                                if (plane.linearIntersect(point, occlusionRay) >= 0.000001F) {
-                                    visiblility--;
-                                    continue outerLoop;
+                    for(Plane[] planeList : body.planeChunks.keySet()){
+                        float[] data = body.planeChunks.get(planeList);
+                        Vector center = new Vector(data[0], data[1], data[2]);
+                        if (Vector.shortDistance(occlusionRay, point, center) <= data[3] + 0.000001F) {
+                            for (Plane plane : planeList) {
+                                if (plane != parentPlane) {
+                                    if ((body == parentPlane.parent) && (plane.n0 != null) && (Vector.dot(plane.nAvg, occlusionRay) < 0)) {
+                                        continue;
+                                    }
+                                    if (Vector.shortDistance(occlusionRay, point, plane.center) <= plane.radius) {
+                                        if (plane.linearIntersect(point, occlusionRay) >= 0.000001F) {
+                                            visiblility--;
+                                            continue outerLoop;
+                                        }
+                                    }
                                 }
                             }
                         }
@@ -281,5 +329,134 @@ public class Camera {
         }
         float occlusion = (float) visiblility / ((float)hemiPoints.size());// - parentPlane.occlusionModifier);
         return (float) pow(occlusion, strength);
+    }
+
+    private static float[] reflect(Body[] visibleBodies, Light[] lightInstances, float globalBrightness, Vector ray, Vector point, Plane parentPlane){
+        Vector normal = parentPlane.correctedNormal(ray, point).unit();
+        Vector rayVector = Vector.subtract(ray, Vector.multiply(normal, 2F*Vector.dot(ray, normal)));
+        float lowestT = -1F;
+        Plane hitPlane = null;
+        float intersectT;
+        for(Body body : visibleBodies){
+            if (Vector.shortDistance(rayVector, point, body.origin) <= body.boundingRadius) {
+                for(Plane[] planeList : body.planeChunks.keySet()){
+                    float[] data = body.planeChunks.get(planeList);
+                    Vector center = new Vector(data[0], data[1], data[2]);
+                    if (Vector.shortDistance(rayVector, point, center) <= data[3] + 0.000001F) {
+                        for (Plane plane : planeList) {
+                            if (plane != parentPlane && Vector.shortDistance(rayVector, point, plane.center) <= plane.radius) {
+                                intersectT = plane.linearIntersect(point, rayVector);
+                                if (intersectT >= 0F) {
+                                    if (intersectT < lowestT || lowestT < 0F) {
+                                        lowestT = intersectT;
+                                        hitPlane = plane;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        float[] totalColor;
+        if(hitPlane != null){
+            totalColor = new float[]{hitPlane.color[0] * globalBrightness, hitPlane.color[1] * globalBrightness, hitPlane.color[2] * globalBrightness};
+            List<float[]> colorCasts = new ArrayList<>();
+            Vector hitPoint = Vector.add(point, Vector.multiply(rayVector, -lowestT));
+            Vector planeNorm = hitPlane.correctedNormal(rayVector, hitPoint).unit();
+            float iorMult = hitPlane.iorTotal(0.5F /  (float) (10*PI));
+            for(Light light : lightInstances){
+                float multiplier = light.illumination(hitPoint,hitPlane,visibleBodies,rayVector);
+                Vector reflection = Vector.add(rayVector.unit(), (Vector.multiply(planeNorm, -2F*Vector.dot(planeNorm, rayVector.unit()))));
+                float specular = iorMult * multiplier * (float) pow(max(Vector.dot(reflection, Vector.subtract(hitPoint, light.origin).unit()), 0), hitPlane.specular);
+                colorCasts.add(new float[]{light.color[0]*(multiplier*hitPlane.color[0] + specular), light.color[1]*(multiplier*hitPlane.color[1] + specular), light.color[2]*(multiplier*hitPlane.color[2] + specular)});
+            }
+            for(float[] color : colorCasts){
+                totalColor[0] += color[0];
+                totalColor[1] += color[1];
+                totalColor[2] += color[2];
+            }
+        }
+        else{
+            totalColor = new float[]{globalBrightness, globalBrightness, globalBrightness};
+        }
+        return totalColor;
+    }
+
+    public void rasterize(){
+        float[][] points;
+        Vector frameVector = Vector.subtract(this.frameOrigin, this.origin);
+        float xAdjust = (this.pixelsX)/2F;
+        float yAdjust = (this.pixelsY)/2F;
+        for(Plane plane : this.planeCompletion.keySet()){
+            points = new float[3][2];
+            Vector d0 = Vector.subtract(plane.p0, this.origin);
+            d0.divide(Vector.proj(d0, frameVector)/frameVector.magnitude());
+            points[0][0] = Vector.proj(d0, this.widthVector) / xMult + xAdjust;
+            points[0][1] = Vector.proj(d0, this.heightVector) / yMult + yAdjust;
+
+            Vector d1 = Vector.subtract(plane.p1, this.origin);
+            d1.divide(Vector.proj(d1, frameVector)/frameVector.magnitude());
+            points[1][0] = Vector.proj(d1, this.widthVector) / xMult + xAdjust;
+            points[1][1] = Vector.proj(d1, this.heightVector) / yMult + yAdjust;
+
+            Vector d2 = Vector.subtract(plane.p2, this.origin);
+            d2.divide(Vector.proj(d2, frameVector)/frameVector.magnitude());
+            points[2][0] = Vector.proj(d2, this.widthVector) / xMult + xAdjust;
+            points[2][1] = Vector.proj(d2, this.heightVector) / yMult + yAdjust;
+
+            //System.out.println(Arrays.deepToString(points));
+            Arrays.sort(points, (a, b) -> Float.compare(a[0], b[0]));
+            //System.out.println(Arrays.deepToString(points));
+            float m1 = (points[1][1] - points[0][1]) / (points[1][0] - points[0][0]);
+            float m2 = (points[2][1] - points[0][1]) / (points[2][0] - points[0][0]);
+            float m3 = (points[2][1] - points[1][1]) / (points[2][0] - points[1][0]);
+            float offset1 = 0, offset2 = 0, offset3 = 0;
+
+            if(m1 >= m2){
+                if(m1 > 0){
+                    offset1 = 1;
+                }
+                if(m2 < 0){
+                    offset2 = 1;
+                }
+                if(m3 > 0){
+                    offset3 = 1;
+                }
+            }else{
+                if(m1 < 0){
+                    offset1 = 1;
+                }
+                if(m2 > 0){
+                    offset2 = 1;
+                }
+                if(m3 < 0){
+                    offset3 = 1;
+                }
+            }
+            for(int u = max(0, (int)points[0][0]); u < min(this.pixelsX, (int)points[1][0]); u++){
+                int v1 = (int)(m1 * (u - points[0][0] + offset1) + points[0][1]);
+                int v2 = (int)(m2 * (u - points[0][0] + offset2) + points[0][1]);
+                for(int v = max(0, min(v1, v2)); v <= min(this.pixelsY - 1, max(v1,v2)); v++){
+                    raster[v][u].add(plane);
+                }
+            }
+            if((int)points[2][0] == (int)points[1][0] && (int)points[1][0] < this.pixelsX){
+                for (int v = max(0, (int)min(points[1][1], points[2][1])); v <= min(this.pixelsY - 1, (int)max(points[1][1], points[2][1])); v++) {
+                    if(v >= this.pixelsY){
+                        break;
+                    }
+                    raster[v][(int)points[1][0]].add(plane);
+                }
+            }else {
+                for (int u = max(0, (int)points[1][0]); u <= min(this.pixelsX - 1, (int)points[2][0]+1); u++) {
+                    int v1 = (int) (m3 * (u - points[1][0] + offset3) + points[1][1]);
+                    int v2 = (int) (m2 * (u - points[0][0] + offset2) + points[0][1]);
+                    for (int v = max(0, min(v1, v2)); v <= min(this.pixelsY - 1, max(v1, v2)); v++) {
+                        raster[v][u].add(plane);
+                    }
+                }
+            }
+       }
     }
 }

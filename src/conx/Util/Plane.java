@@ -12,6 +12,7 @@ public class Plane {
     public float radius, parArea;
     public float iorTotal = 0;
     public float specular = 4F;
+    public float roughness = 1F;
     public int occlusionModifier = 0;
     public float[] color;
     public int[] simpleColor;
@@ -141,6 +142,50 @@ public class Plane {
         this.base1 = Vector.subtract(this.p0, this.p2);
         this.parArea = Vector.cross(base0, base1).magnitude();
         return this;
+    }
+
+    public static Vector findCenter(List<Plane> planeList){
+        float x = 0, y = 0, z = 0;
+        for(Plane plane : planeList){
+            x += plane.p0.x + plane.p1.x + plane.p2.x;
+            y += plane.p0.y + plane.p1.y + plane.p2.y;
+            z += plane.p0.z + plane.p1.z + plane.p2.z;
+        }
+        return new Vector(x / (planeList.size()*3), y / (planeList.size()*3), z / (planeList.size()*3));
+    }
+
+    public static float findRadius(List<Plane> planeList, Vector point){
+        float newRadius = 0;
+        for (Plane plane : planeList) {
+            float planeRadius = plane.distanceFrom(point);
+            if (planeRadius > newRadius) {
+                newRadius = planeRadius;
+            }
+        }
+        return newRadius;
+    }
+
+    public static Plane findLeastFar(List<Plane> planeList, Vector center){
+        float lowDistance = planeList.getFirst().distanceFrom(center);
+        Plane closePlane = planeList.getFirst();
+        float testDistance;
+        for(int i = 1; i < planeList.size(); i++){
+            testDistance = planeList.get(i).distanceFrom(center);
+            if(testDistance < lowDistance){
+                lowDistance = testDistance;
+                closePlane = planeList.get(i);
+            }
+        }
+        return closePlane;
+    }
+
+    public static Boolean childrenGreater(List<List<Plane>> collectionList, int amount){
+        for(List<Plane> planeList : collectionList){
+            if(planeList.size() > amount){
+                return true;
+            }
+        }
+        return false;
     }
 
 }

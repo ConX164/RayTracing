@@ -15,7 +15,7 @@ public class Light {
     public float strength, radius;
     public float[] color;
     static Random rand = new Random();
-    final float spacing = 0.05F;
+    final float spacing = 0.025F;
     List<float[]> lightPoints = new ArrayList<>();
     private int amount;
     //Constructor
@@ -44,13 +44,36 @@ public class Light {
             Vector circlePoint = Vector.add(origin,Vector.add(Vector.multiply(v1,source[0]), Vector.multiply(v2,source[1])));
             Vector lightRay = Vector.subtract(point, circlePoint);
             for(Body body : bodyList){
-                for(Plane plane : body.surfaces){
-                    if(plane != parentPlane){
-                        if((body == parentPlane.parent) && (plane.n0 != null) && (-Vector.dot(plane.nAvg, lightRay) > 0)){continue;}
-                        if(plane.linearIntersect(point, lightRay) >= 0.000001F){
-                            continue outerLoop;
+                if (Vector.shortDistance(lightRay, this.origin, body.origin) <= body.boundingRadius + 0.000001F) {
+                   /*if(body.planeChunks == null) {
+                        for (Plane plane : body.surfaces) {
+                            if (plane != parentPlane) {
+                                if ((body == parentPlane.parent) && (plane.n0 != null) && (-Vector.dot(plane.nAvg, lightRay) > 0)) {
+                                    continue;
+                                }
+                                if (plane.linearIntersect(point, lightRay) >= 0.000001F) {
+                                    continue outerLoop;
+                                }
+                            }
                         }
-                    }
+                    }else{*/
+                       for(Plane[] planeList : body.planeChunks.keySet()){
+                           float[] data = body.planeChunks.get(planeList);
+                           Vector center = new Vector(data[0], data[1], data[2]);
+                           if (Vector.shortDistance(lightRay, this.origin, center) <= data[3] + 0.000001F) {
+                               for (Plane plane : planeList) {
+                                   if (plane != parentPlane) {
+                                       if ((body == parentPlane.parent) && (plane.n0 != null) && (-Vector.dot(plane.nAvg, lightRay) > 0)) {
+                                           continue;
+                                       }
+                                       if (plane.linearIntersect(point, lightRay) >= 0.000001F) {
+                                           continue outerLoop;
+                                       }
+                                   }
+                               }
+                           }
+                       }
+                    //}
                 }
             }
             visibility += -Vector.dot(lightRay.unit(), parentPlane.correctedNormal(cameraRay, point).unit());

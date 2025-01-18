@@ -1,11 +1,14 @@
 package conx;
 
+import conx.Util.Matrix;
 import conx.Util.Plane;
 import conx.Util.Vector;
 import conx.Util.rayHemisphere;
 
-import java.util.ArrayList;
-import java.util.List;
+import java.io.File;
+import java.io.FileNotFoundException;
+import java.util.*;
+
 import static java.lang.Math.*;
 
 public class Body {
@@ -14,6 +17,7 @@ public class Body {
     public boolean smooth = false;
     public float boundingRadius = 0;
     public Vector origin;
+    public HashMap<Plane[], float[]> planeChunks;
     // Constructor
     public Body(Vector origin, Plane[] planeList, int[] color, float roll, float pitch, float yaw){
         this.color = color.clone();
@@ -27,6 +31,7 @@ public class Body {
                 this.boundingRadius = planeRadius;
             }
         }
+        this.fragment();
     }
     public Body setSmooth(){
         if(surfaces.getFirst().n0Hold != null){
@@ -51,27 +56,85 @@ public class Body {
         for(Plane plane : this.surfaces){
             plane.specular = specular;
             plane.occlusionModifier = modifier;
+            plane.roughness = roughness;
         }
         return this;
     }
+    public Body fragment(int size) {
+        List<List<Plane>> fragmentList = new ArrayList<>();
+        fragmentList.add(this.surfaces);
+        List<List<Plane>> temporaryList = new ArrayList<>();
+        while(Plane.childrenGreater(fragmentList, size)){
+            temporaryList.clear();
+            for(List<Plane> planeList : fragmentList){
+                if(planeList.size() <= size){
+                    temporaryList.add(planeList);
+                }else{
+                    List<Plane> list1 = new ArrayList<>();
+                    List<Plane> list2 = new ArrayList<>();
+                    Vector center = Plane.findCenter(planeList);
+                    float radius = Plane.findRadius(planeList, center);
+                    Vector line = Matrix.linreg(planeList).multiply(radius);
+                    Vector p1 = Vector.add(center, line);
+                    Vector p2 = Vector.subtract(center, line);
+                    List<Plane> checklist = new ArrayList<>(planeList);
+                    Plane goodPlane;
+                    for(int i = 0; i < planeList.size(); i++){
+                        if(i % 2 == 0){
+                            goodPlane = Plane.findLeastFar(checklist, p1);
+                            list1.add(goodPlane);
+                            checklist.remove(goodPlane);
+                        }else{
+                            goodPlane = Plane.findLeastFar(checklist, p2);
+                            list2.add(goodPlane);
+                            checklist.remove(goodPlane);
+                        }
+                    }
+                    temporaryList.add(list1);
+                    temporaryList.add(list2);
+                }
+            }
+            fragmentList = new ArrayList<>(temporaryList);
+        }
+        this.planeChunks = new HashMap<>();
+        for(List<Plane> planeList : fragmentList){
+            Vector center = Plane.findCenter(planeList);
+            float radius = Plane.findRadius(planeList, center);
+            this.planeChunks.put(planeList.toArray(new Plane[0]), new float[]{center.x, center.y, center.z, radius});
+        }
+        return this;
+    }
+    private Body fragment(){
+        return this.fragment(15);//15
+    }
     // Static methods
-    /*public static Body cube(Vector origin, float size, int[] color){ // Deprecated
-        Plane[] cubePlanes = {
-                new Plane(Vector.multiply(new Vector(0,0,0), size), Vector.multiply(new Vector(1,0,0), size), Vector.multiply(new Vector(0,1,0), size)),
-                new Plane(Vector.multiply(new Vector(1,1,0), size), Vector.multiply(new Vector(1,0,0), size), Vector.multiply(new Vector(0,1,0), size)),
-                new Plane(Vector.multiply(new Vector(0,0,1), size), Vector.multiply(new Vector(1,0,1), size), Vector.multiply(new Vector(0,1,1), size)),
-                new Plane(Vector.multiply(new Vector(1,1,1), size), Vector.multiply(new Vector(1,0,1), size), Vector.multiply(new Vector(0,1,1), size)),
-                new Plane(Vector.multiply(new Vector(0,0,0), size), Vector.multiply(new Vector(1,0,0), size), Vector.multiply(new Vector(0,0,1), size)),
-                new Plane(Vector.multiply(new Vector(1,0,1), size), Vector.multiply(new Vector(1,0,0), size), Vector.multiply(new Vector(0,0,1), size)),
-                new Plane(Vector.multiply(new Vector(0,1,0), size), Vector.multiply(new Vector(1,1,0), size), Vector.multiply(new Vector(0,1,1), size)),
-                new Plane(Vector.multiply(new Vector(1,1,1), size), Vector.multiply(new Vector(1,1,0), size), Vector.multiply(new Vector(0,1,1), size)),
-                new Plane(Vector.multiply(new Vector(0,0,0), size), Vector.multiply(new Vector(0,1,0), size), Vector.multiply(new Vector(0,0,1), size)),
-                new Plane(Vector.multiply(new Vector(0,1,1), size), Vector.multiply(new Vector(0,1,0), size), Vector.multiply(new Vector(0,0,1), size)),
-                new Plane(Vector.multiply(new Vector(1,0,0), size), Vector.multiply(new Vector(1,1,0), size), Vector.multiply(new Vector(1,0,1), size)),
-                new Plane(Vector.multiply(new Vector(1,1,1), size), Vector.multiply(new Vector(1,1,0), size), Vector.multiply(new Vector(1,0,1), size))
-        };
-        return new Body(origin, cubePlanes, color, 0, 0, 0, false);
-    }*/
+    public static Body importModel(String fileName, Vector origin, int[] color, float roll, float pitch, float yaw) {
+        List<Plane> faces = new ArrayList<>();
+        try {
+            File modelFile = new File(fileName);
+            Scanner modelScanner = new Scanner(modelFile);
+            String[] line;
+            List<Vector> points = new ArrayList<>();
+            List<Vector> normals = new ArrayList<>();
+            while (modelScanner.hasNextLine()) {
+                line = modelScanner.nextLine().split("\\s");
+                if (Objects.equals(line[0], "v")) {
+                    points.add(new Vector(Float.parseFloat(line[1]), Float.parseFloat(line[2]), Float.parseFloat(line[3])));
+                } else if (Objects.equals(line[0], "vn")) {
+                    normals.add(new Vector(Float.parseFloat(line[1]), Float.parseFloat(line[2]), Float.parseFloat(line[3])));
+                } else if (Objects.equals(line[0], "f")) {
+                    String[] p0Data = line[1].split("/");
+                    String[] p1Data = line[2].split("/");
+                    String[] p2Data = line[3].split("/");
+                    faces.add(new Plane(points.get(Integer.parseInt(p0Data[0]) - 1), points.get(Integer.parseInt(p1Data[0]) - 1), points.get(Integer.parseInt(p2Data[0]) - 1)).setNormals(normals.get(Integer.parseInt(p0Data[2]) - 1), normals.get(Integer.parseInt(p1Data[2]) - 1), normals.get(Integer.parseInt(p2Data[2]) - 1)));
+                }
+            }
+            modelScanner.close();
+        } catch (FileNotFoundException ignored) {
+            System.out.println("ERROR: Model file not found");
+        }
+        return new Body(origin, faces.toArray(new Plane[0]), color, roll, pitch, yaw);
+    }
     public static Body plane(Vector origin, float scaleX, float scaleY, int[] color,float roll, float pitch, float yaw){
         Vector xy = new Vector(scaleX*0.5F,scaleY*0.5F,0);
         Vector x_y = new Vector(-scaleX*0.5F,scaleY*0.5F,0);
@@ -181,18 +244,46 @@ public class Body {
         }
         int indexCount = 0;
         Vector n1, n2, n3;
+        n3 = new Vector(0F,0F,0F);
         for(int i = 0; i < segments; i++, indexCount++){
             n1 = new Vector(circlePoints[i].x, circlePoints[i].y, normalHeight);
             n2 = new Vector(circlePoints[i+1].x, circlePoints[i+1].y, normalHeight);
-            n3 = new Vector(0F,0F,0F);
-            conePlanes[indexCount] = new Plane(circlePoints[i], circlePoints[i+1], tip).setNormals(n1.unit(), n2.unit(), n3.unit());
+            conePlanes[indexCount] = new Plane(circlePoints[i], circlePoints[i+1], tip).setNormals(n1.unit(), n2.unit(), n3);
         }
         for(int i = 1; i < segments - 1; i++, indexCount++){
             conePlanes[indexCount] = new Plane(circlePoints[0], circlePoints[i], circlePoints[i+1]);
         }
         return new Body(origin, conePlanes, color, roll, pitch, yaw);
     }
+    public static Body torus(Vector origin, float majorRadius, float minorRadius, int majorSegments, int minorSegments, int[] color, float roll, float pitch, float yaw){
+        float minorTheta = (float) (2*PI/minorSegments);
+        float majorTheta = (float) (2*PI/majorSegments);
+        Vector[][] points = new Vector[majorSegments + 1][minorSegments + 1];
+        Vector[][] normals = new Vector[majorSegments + 1][minorSegments + 1];
+        Plane[] torusPlanes = new Plane[2 * minorSegments * majorSegments];
+        Vector newPoint;
+        for(int i = 0; i <= minorSegments; i++){
+            newPoint = new Vector(0, (float) (minorRadius*cos(i*minorTheta)), (float) (minorRadius*sin(i*minorTheta)));
+            for(int j = 0; j <= majorSegments; j++){
+                points[j][i] = Vector.add(newPoint, new Vector(0, majorRadius, 0)).rotate(0,0,(j*majorTheta) * (180F/(float)PI));
+                normals[j][i] = newPoint.rotate(0,0,(j*majorTheta) * (180F/(float)PI)).unit();
+            }
+        }
+
+        int indexcount = 0;
+        for(int i = 0; i < minorSegments; i++){
+            for(int j = 0; j < majorSegments; j++){
+                torusPlanes[indexcount] = new Plane(points[j][i], points[j+1][i], points[j][i+1]).setNormals(normals[j][i], normals[j+1][i], normals[j][i+1]);
+                torusPlanes[indexcount + 1] = new Plane(points[j+1][i+1], points[j+1][i], points[j][i+1]).setNormals(normals[j+1][i+1], normals[j+1][i], normals[j][i+1]);
+                indexcount += 2;
+            }
+        }
+        return new Body(origin, torusPlanes, color, roll, pitch, yaw);
+    }
     // Overloading
+    public static Body importModel(String fileName, Vector origin, int[] color){
+        return importModel(fileName, origin, color, 0, 0, 0);
+    }
     public static Body plane(Vector origin, float scaleX, float scaleY, int[] color){
         return plane(origin, scaleX, scaleY, color, 0, 0, 0);
     }
@@ -208,5 +299,8 @@ public class Body {
     }
     public static Body cone(Vector origin, float radius, float height, int segments, int[] color){
         return cone(origin, radius, height, segments, color, 0, 0, 0);
+    }
+    public static Body torus(Vector origin, float majorRadius, float minorRadius, int majorSegments, int minorSegments, int[] color){
+        return torus(origin, majorRadius, minorRadius, majorSegments, minorSegments, color, 0, 0, 0);
     }
 }

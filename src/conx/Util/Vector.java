@@ -88,6 +88,9 @@ public class Vector {
     public static Vector cross(Vector v1, Vector v2){
         return new Vector(v1.y*v2.z - v1.z*v2.y, -(v1.x*v2.z - v1.z*v2.x), v1.x*v2.y - v1.y*v2.x);
     }
+    public static float proj(Vector a, Vector b){
+        return Vector.dot(a , b) / b.magnitude();
+    }
     public static Vector extend(Vector origin, Vector normal, float t){
         return new Vector(origin.x + normal.x*t,origin.y + normal.y*t,origin.z + normal.z*t);
     }
