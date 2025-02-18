@@ -7,64 +7,35 @@ import java.util.Random;
 import static java.lang.Math.*;
 
 public class rayHemisphere {
-    public static List<float[]> hemiPoints;
+    static float[][][] randomPoints;
+    static int variations = 64;
     static Random rand = new Random();
-    static float PI2 = (float) (2 * PI);
-    public static int divisions = 6;
-    static float zSpacing = 1F / divisions;
-    static float oSpacing = PI2 / (4 * divisions);
-    static float[] zList = new float[divisions];
-    static float[] oList = new float[divisions * 4];
-    static int divisionsLQ = 6;
-    static float zSpacingLQ = 1F / divisionsLQ;
-    static float oSpacingLQ = PI2 / (4 * divisionsLQ);
-    static float[] zListLQ = new float[divisionsLQ];
-    static float[] oListLQ = new float[divisionsLQ * 4];
+    public static float radius = 0.8F;
+    static int sections = 6;
 
     static {
-        zList[0] = zSpacing / 1000F;
-        for(int i = 1; i < divisions; i++){
-            zList[i] = zSpacing * i;
-        }
-        for(int i = 0; i < divisions*4; i++){
-            oList[i] = oSpacing * i;
-        }
+        randomPoints = new float[variations][(sections - 1)*(4 * sections) + 1][3];
+        float zSpace = radius / sections;
+        float thetaSpace = (float) ((PI) / (2F * sections));
+        int count;
+        for(float[][] pointList : randomPoints){
+            count = 1;
+            pointList[0] = new float[]{0, 0, -radius};
+            for(int i = 1; i < (sections); i++){
+                float zBase = zSpace*i;
+                for(int j = 0; j < 4 * sections; j++){
+                    float z = zBase + rand.nextFloat()*zSpace;
+                    float r = (float) sqrt(radius*radius - z*z);
+                    float theta = thetaSpace*j + rand.nextFloat()*thetaSpace;
+                    pointList[count] = new float[]{(float) (r*cos(theta)), (float) (r*sin(theta)), -z};
+                    count++;
+                }
 
-        zListLQ[0] = zSpacingLQ / 1000F;
-        for(int i = 1; i < divisionsLQ; i++){
-            zListLQ[i] = zSpacingLQ * i;
-        }
-        for(int i = 0; i < divisionsLQ*4; i++){
-            oListLQ[i] = oSpacingLQ * i;
-        }
-
-        float size = 0.8F;
-        hemiPoints = new ArrayList<>();
-        for(int i = 0; i < divisionsLQ; i++){
-            for(int j = 0; j < divisionsLQ * 4; j++){
-                float z = -zListLQ[i];
-                float r = size * (float) sqrt(1 - z*z);
-                float o = oListLQ[j];
-                float x = (float) cos(o);
-                float y = (float) (o>PI ? -sqrt(1 - x * x) : sqrt(1 - x * x));
-                hemiPoints.add(new float[]{r * x, r * y, size * z});
             }
         }
     }
 
-    public static List<float[]> adjustedRandom(){
-        float size = 0.8F;
-        List<float[]> newList = new ArrayList<>();
-        for(int i = 0; i < divisions; i++){
-            for(int j = 0; j < divisions * 4; j++){
-                float z = zList[i] + zSpacing*rand.nextFloat();
-                float r = size * (float) sqrt(1 - z*z);
-                float o = oList[j] + oSpacing*rand.nextFloat();
-                float x = (float) cos(o);
-                float y = (float) (o>PI ? -sqrt(1 - x * x) : sqrt(1 - x * x));
-                newList.add(new float[]{r * x, r * y, size * -z});
-            }
-        }
-        return newList;
+    public static float[][] randomHemisphere(){
+        return randomPoints[rand.nextInt(0, variations)];
     }
 }

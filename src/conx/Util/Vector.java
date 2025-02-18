@@ -95,6 +95,6 @@ public class Vector {
         return new Vector(origin.x + normal.x*t,origin.y + normal.y*t,origin.z + normal.z*t);
     }
     public static float shortDistance(Vector ray, Vector origin, Vector point){
-        return  Vector.cross(ray, Vector.subtract(point, origin)).magnitude() / ray.magnitude();
+        return Vector.cross(ray, Vector.subtract(point, origin)).magnitude() / ray.magnitude();
     }
 }

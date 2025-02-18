@@ -175,11 +175,11 @@ public class Camera {
             List<float[]> colorCasts = new ArrayList<>();
             Vector hitPoint = Vector.add(this.origin, Vector.multiply(rayVector, -lowestT));
             Vector planeNorm = hitPlane.correctedNormal(rayVector, hitPoint).unit();
-            float occlusionEstimate = ambientOcclusionDetect(hitPoint,hitPlane,bodyList,planeNorm);
+            //float occlusionEstimate = 0;//ambientOcclusionDetect(hitPoint,hitPlane,bodyList,planeNorm);
             float occlusionMult = minimumBrightness;
-            if(occlusionEstimate == 0) {
-                occlusionMult = ambientOcclusionRandom(hitPoint, hitPlane, bodyList, planeNorm) * minimumBrightness;
-            }
+            //if(occlusionEstimate == 0) {
+            occlusionMult = ambientOcclusionRandom(hitPoint, hitPlane, bodyList, planeNorm) * minimumBrightness;
+            //}
             float iorMult = hitPlane.iorTotal(this.iorLevel);
             for(Light light : lightList){
                 float multiplier = light.illumination(hitPoint,hitPlane,bodyList,rayVector);
@@ -255,8 +255,8 @@ public class Camera {
         return canvas;
     }
 
-    private static int ambientOcclusionDetect(Vector point, Plane parentPlane, Body[] bodyList, Vector vk){
-        List<float[]> hemiPoints = rayHemisphere.hemiPoints;
+    /*private static int ambientOcclusionDetect(Vector point, Plane parentPlane, Body[] bodyList, Vector vk){
+        float[][] hemiPoints = rayHemisphere.testPoints;
         Vector vTemp = Vector.subtract(parentPlane.p1,parentPlane.p2).unit();
         Vector vi = Vector.cross(vk,vTemp).unit();
         Vector vj = Vector.cross(vk,vi).unit();
@@ -286,11 +286,11 @@ public class Camera {
             }
         }
         return 1;
-    }
+    }*/
 
     private static float ambientOcclusionRandom(Vector point, Plane parentPlane, Body[] bodyList, Vector vk){
-        List<float[]> hemiPoints = rayHemisphere.adjustedRandom();
-        int visiblility = hemiPoints.size();// - parentPlane.occlusionModifier;
+        float[][] hemiPoints = rayHemisphere.randomHemisphere();
+        int visiblility = hemiPoints.length;// - parentPlane.occlusionModifier;
         float strength = 1.2F;
         Vector vTemp = Vector.subtract(parentPlane.p1,parentPlane.p2).unit();
         Vector vi = Vector.cross(vk,vTemp).unit();
@@ -298,17 +298,13 @@ public class Camera {
         //int i = 0;
         outerLoop:
         for(float[] source : hemiPoints){
-            /*if(i < parentPlane.occlusionModifier){
-                i++;
-                continue;
-            }*/
             Vector occlusionRay = Vector.add(Vector.multiply(vi, source[0]), Vector.multiply(vj, source[1])).add(Vector.multiply(vk, source[2]));
             for(Body body : bodyList){
-                if (Vector.shortDistance(occlusionRay, point, body.origin) <= body.boundingRadius) {
+                if (Vector.shortDistance(occlusionRay, point, body.origin) <= body.boundingRadius && Vector.subtract(point, body.origin).magnitude() <= body.boundingRadius + rayHemisphere.radius) {
                     for(Plane[] planeList : body.planeChunks.keySet()){
                         float[] data = body.planeChunks.get(planeList);
                         Vector center = new Vector(data[0], data[1], data[2]);
-                        if (Vector.shortDistance(occlusionRay, point, center) <= data[3] + 0.000001F) {
+                        if(Vector.shortDistance(occlusionRay, point, center) <= data[3] + 0.000001F && Vector.subtract(point, center).magnitude() <= data[3] + rayHemisphere.radius) {
                             for (Plane plane : planeList) {
                                 if (plane != parentPlane) {
                                     if ((body == parentPlane.parent) && (plane.n0 != null) && (Vector.dot(plane.nAvg, occlusionRay) < 0)) {
@@ -327,7 +323,7 @@ public class Camera {
                 }
             }
         }
-        float occlusion = (float) visiblility / ((float)hemiPoints.size());// - parentPlane.occlusionModifier);
+        float occlusion = (float) visiblility / ((float)hemiPoints.length);// - parentPlane.occlusionModifier);
         return (float) pow(occlusion, strength);
     }
 

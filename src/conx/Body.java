@@ -108,7 +108,7 @@ public class Body {
         return this.fragment(15);//15
     }
     // Static methods
-    public static Body importModel(String fileName, Vector origin, int[] color, float roll, float pitch, float yaw) {
+    public static Body importModel(String fileName, Vector origin, int[] color, float scale , float roll, float pitch, float yaw) {
         List<Plane> faces = new ArrayList<>();
         try {
             File modelFile = new File(fileName);
@@ -119,9 +119,9 @@ public class Body {
             while (modelScanner.hasNextLine()) {
                 line = modelScanner.nextLine().split("\\s");
                 if (Objects.equals(line[0], "v")) {
-                    points.add(new Vector(Float.parseFloat(line[1]), Float.parseFloat(line[2]), Float.parseFloat(line[3])));
+                    points.add(new Vector(Float.parseFloat(line[3]) * scale, Float.parseFloat(line[1]) * scale, Float.parseFloat(line[2]) * scale));
                 } else if (Objects.equals(line[0], "vn")) {
-                    normals.add(new Vector(Float.parseFloat(line[1]), Float.parseFloat(line[2]), Float.parseFloat(line[3])));
+                    normals.add(new Vector(Float.parseFloat(line[3]), Float.parseFloat(line[1]), Float.parseFloat(line[2])));
                 } else if (Objects.equals(line[0], "f")) {
                     String[] p0Data = line[1].split("/");
                     String[] p1Data = line[2].split("/");
@@ -282,7 +282,13 @@ public class Body {
     }
     // Overloading
     public static Body importModel(String fileName, Vector origin, int[] color){
-        return importModel(fileName, origin, color, 0, 0, 0);
+        return importModel(fileName, origin, color, 1, 0, 0, 0);
+    }
+    public static Body importModel(String fileName, Vector origin, int[] color, float scale){
+        return importModel(fileName, origin, color, scale, 0, 0, 0);
+    }
+    public static Body importModel(String fileName, Vector origin, int[] color, float roll, float pitch, float yaw){
+        return importModel(fileName, origin, color,1, roll, pitch, yaw);
     }
     public static Body plane(Vector origin, float scaleX, float scaleY, int[] color){
         return plane(origin, scaleX, scaleY, color, 0, 0, 0);
