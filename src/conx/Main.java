@@ -19,6 +19,7 @@
  *     Triangulated model importing of .obj files
  *     Full rotation and scaling support
  *     Camera focus position and focal length
+ *     Mutithreaded rendering
  */
 
 package conx;
@@ -67,7 +68,10 @@ public class Main {
         /*
          * The following code defines a sample scene.
          * Body objects are created and added to the global collection, which is in turn fed into the render function of the camera.
-         * Light objects are also defined and added to their own collection
+         * Light objects are also defined and added to their own collection.
+         * WARNING: Depending on complexity, renders can take anywhere from 10 seconds to half an hour.
+         * Most renders using ~10 primitives often take a minute or less.
+         * Renders containing simple imports can take around two minutes or more.
          */
         int[] lightColor = new int[]{255,255,255};
         bodyWorld.add(Body.plane(new Vector(0,0,0), 4F, 4F, new int[]{5,255,255}).setRoughness(0.1F));
