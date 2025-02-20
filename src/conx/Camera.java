@@ -8,13 +8,16 @@ import java.util.concurrent.ConcurrentHashMap;
 
 import static java.lang.Math.*;
 
-// Threading
+/**
+ * This class is responsible for creating threads that calculate data for each pixel
+ */
 class renderThread extends Thread{
     final Camera activeCamera;
 
     public renderThread(Camera activeCamera){
         this.activeCamera = activeCamera;
     }
+
     public void run(){
         try{
             long startTime = System.nanoTime();
@@ -28,17 +31,18 @@ class renderThread extends Thread{
                 for (int y = 0; y < activeCamera.pixelsY; y++) {
                     index = x + y * activeCamera.pixelsX;
                     if (activeCamera.chunkCompletion.putIfAbsent(index, true) == null) {
-                        colorMix = new int[]{0, 0, 0};
-                        hitPlanes = new HashMap<>();
+                        colorMix = new int[]{0, 0, 0}; // Color data for antialiasing
+                        hitPlanes = new HashMap<>(); // Tracking planes to prevent excess sampling
                         for (int i = 0; i < activeCamera.sampling; i++) {
                             for (int j = 0; j < activeCamera.sampling; j++) {
-                                samplingColor = activeCamera.advancedRaytrace(x + (float) i / activeCamera.sampling, y + (float) j / activeCamera.sampling, activeCamera.visibleBodies, activeCamera.lightInstances, activeCamera.globalBrightness, hitPlanes);
-                                colorMix[0] += samplingColor[0];
-                                colorMix[1] += samplingColor[1];
-                                colorMix[2] += samplingColor[2];
+                                samplingColor = activeCamera.advancedRaytrace(      // perform raytrace
+                                        x + (float) i / activeCamera.sampling, y + (float) j / activeCamera.sampling, activeCamera.visibleBodies, activeCamera.lightInstances, activeCamera.globalBrightness, hitPlanes);
+                                colorMix[0] += samplingColor[0]; // red
+                                colorMix[1] += samplingColor[1]; // green
+                                colorMix[2] += samplingColor[2]; // blue
                             }
                         }
-                        activeCamera.canvas[x][y] = new int[]{colorMix[0] / sampleSpots, colorMix[1] / sampleSpots, colorMix[2] / sampleSpots};
+                        activeCamera.canvas[x][y] = new int[]{colorMix[0] / sampleSpots, colorMix[1] / sampleSpots, colorMix[2] / sampleSpots}; // store data
                         count++;
                     }
                 }
@@ -68,8 +72,8 @@ public class Camera {
     ConcurrentHashMap<Integer, Boolean> chunkCompletion = new ConcurrentHashMap<>();
     ConcurrentHashMap<Plane, Boolean> planeCompletion = new ConcurrentHashMap<>();
     List<Plane>[][] raster;
-
     int sampling = 4;
+
     // Constructor
     public Camera(Vector origin, Vector focus, int pixelsX, int pixelsY, int focalLength){
         this.origin = origin;
@@ -101,6 +105,15 @@ public class Camera {
         this.heightVector = Vector.cross(targetVector, this.widthVector).multiply(-1).unit();
         this.frameOrigin = Vector.add(origin, Vector.subtract(this.targetVector, Vector.add(this.widthVector, this.heightVector)));
     }
+
+    /**
+     * This function provides a basic raytrace based on a plane's angle from the view.
+     * Does not include AO, lighting, or reflections
+     * @param pixelX Horizontal pixel index
+     * @param pixelY Vertical Pixel index
+     * @param bodyList List of bodies to be rendered
+     * @return Returns color data as a list in [R,G,B] format for a specific pixel (0-255)
+     */
     private int[] simpleRaytrace(float pixelX, float pixelY, Body[] bodyList){
         float tx = pixelX * this.xMult;
         float ty = pixelY * this.yMult;
@@ -110,7 +123,7 @@ public class Camera {
         int[] pixelColor = {70,70,70};
 
         float intersectT;
-        for(Body body : bodyList){
+        for(Body body : bodyList){ // Start intersection tests
             if (Vector.shortDistance(rayVector, this.origin, body.origin) <= body.boundingRadius) {
                 for (Plane plane : body.surfaces) {
                     intersectT = plane.linearIntersect(origin, rayVector);
@@ -125,6 +138,7 @@ public class Camera {
         }
         if(hitPlane != null){
             if(hitPlane.simpleColor == null){
+                // Calculate shading and color
                 float cosBetween = abs(Vector.dot(this.targetVector, hitPlane.norm) / (this.targetVector.magnitude() * hitPlane.norm.magnitude())) * 255F;
                 hitPlane.simpleColor = new int[]{round(hitPlane.color[0] * cosBetween),round(hitPlane.color[1] * cosBetween),round(hitPlane.color[2] * cosBetween)};
             }
@@ -133,15 +147,26 @@ public class Camera {
         return pixelColor;
     }
 
+    /**
+     * This function provides a complex raytrace with all features.
+     * @param pixelX Horizontal pixel index
+     * @param pixelY Vertical pixel index
+     * @param bodyList List of bodies to be rendered
+     * @param lightList List of light sources to be rendered
+     * @param minimumBrightness Value for global lighting (0-1)
+     * @param hitPlanes Plane map to prevent excess supersampling
+     * @return Returns color data as a list in [R,G,B] format for a specific pixel (0-255)
+     */
     public int[] advancedRaytrace(float pixelX, float pixelY, Body[] bodyList, Light[] lightList, float minimumBrightness, HashMap<Plane, int[]> hitPlanes){
-        float tx = (pixelX - (this.pixelsX)/2F) * xMult;
+        float tx = (pixelX - (this.pixelsX)/2F) * xMult; // Converting pixel index to vector scale factor
         float ty = (pixelY - (this.pixelsY)/2F) * yMult;
-        Vector rayVector = Vector.subtract(Vector.add(Vector.add(Vector.multiply(widthVector, tx), Vector.multiply(heightVector,ty)), this.frameOrigin), this.origin).unit().multiply(-1000);
+        Vector rayVector = Vector.subtract(Vector.add(Vector.add(Vector.multiply(widthVector, tx), Vector.multiply(heightVector,ty)), this.frameOrigin), this.origin).unit().multiply(-1000); // Creating main ray
         float lowestT = -1F;
         Plane hitPlane = null;
         float[] pixelColor = {minimumBrightness, minimumBrightness, minimumBrightness};
         int[] newColor;
 
+        // Start intersection test from precalculated raster
         float intersectT;
         for(Plane plane : this.raster[(int) pixelY][(int) pixelX]){
             intersectT = plane.linearIntersect(origin, rayVector);
@@ -152,6 +177,7 @@ public class Camera {
                 }
             }
         }
+        // Deprecated intersection test without rasterization
         /*for(Body body : bodyList){
             if (Vector.shortDistance(rayVector, this.origin, body.origin) <= body.boundingRadius) {
                 for (Plane plane : body.surfaces) {
@@ -170,40 +196,42 @@ public class Camera {
         if(hitPlanes.get(hitPlane) != null){
             return hitPlanes.get(hitPlane);
         }
-        if(hitPlane != null){
+        if(hitPlane != null){ // Begin color calculations
             float[] totalColor = new float[3];
             List<float[]> colorCasts = new ArrayList<>();
             Vector hitPoint = Vector.add(this.origin, Vector.multiply(rayVector, -lowestT));
             Vector planeNorm = hitPlane.correctedNormal(rayVector, hitPoint).unit();
-            //float occlusionEstimate = 0;//ambientOcclusionDetect(hitPoint,hitPlane,bodyList,planeNorm);
+            //float occlusionEstimate = 0;//ambientOcclusionDetect(hitPoint,hitPlane,bodyList,planeNorm); Deprecated AO optimization
             float occlusionMult = minimumBrightness;
             //if(occlusionEstimate == 0) {
-            occlusionMult = ambientOcclusionRandom(hitPoint, hitPlane, bodyList, planeNorm) * minimumBrightness;
+            occlusionMult = ambientOcclusionRandom(hitPoint, hitPlane, bodyList, planeNorm) * minimumBrightness; // Determine AO amount
             //}
-            float iorMult = hitPlane.iorTotal(this.iorLevel);
-            for(Light light : lightList){
-                float multiplier = light.illumination(hitPoint,hitPlane,bodyList,rayVector);
-                Vector reflection = Vector.add(rayVector.unit(), (Vector.multiply(planeNorm, -2F*Vector.dot(planeNorm, rayVector.unit()))));
-                float specular = iorMult * multiplier * (float) pow(max(Vector.dot(reflection, Vector.subtract(hitPoint, light.origin).unit()), 0), hitPlane.specular);
-                colorCasts.add(new float[]{light.color[0]*(multiplier*hitPlane.color[0] + specular), light.color[1]*(multiplier*hitPlane.color[1] + specular), light.color[2]*(multiplier*hitPlane.color[2] + specular)});
+            float iorMult = hitPlane.iorTotal(this.iorLevel); // Temporary variable call for gloss properties
+            for(Light light : lightList){ // Start light/shadow detection
+                float multiplier = light.illumination(hitPoint,hitPlane,bodyList,rayVector); // Detect lighting
+                Vector reflection = Vector.add(rayVector.unit(), (Vector.multiply(planeNorm, -2F*Vector.dot(planeNorm, rayVector.unit())))); // Create reflection ray
+                float specular = iorMult * multiplier * (float) pow(max(Vector.dot(reflection, Vector.subtract(hitPoint, light.origin).unit()), 0), hitPlane.specular); // Calculate specular
+                colorCasts.add(new float[]{light.color[0]*(multiplier*hitPlane.color[0] + specular), light.color[1]*(multiplier*hitPlane.color[1] + specular), light.color[2]*(multiplier*hitPlane.color[2] + specular)}); // Combine lighting
             }
-            colorCasts.add(new float[]{hitPlane.color[0] * occlusionMult, hitPlane.color[1] * occlusionMult, hitPlane.color[2] * occlusionMult});
-            for(float[] color : colorCasts){
+            colorCasts.add(new float[]{hitPlane.color[0] * occlusionMult, hitPlane.color[1] * occlusionMult, hitPlane.color[2] * occlusionMult}); // Add AO
+            for(float[] color : colorCasts){ // Combine all effects
                 totalColor[0] += color[0];
                 totalColor[1] += color[1];
                 totalColor[2] += color[2];
             }
-            if(hitPlane.roughness < 0.5F){
-                float[] relectColor = reflect(bodyList, lightList, minimumBrightness, rayVector, hitPoint, hitPlane);
-                float reflectionWeight = 0.15F - hitPlane.roughness/3.3333F;
+            if(hitPlane.roughness < 0.5F){ // Reflections
+                float[] relectColor = reflect(bodyList, lightList, minimumBrightness, rayVector, hitPoint, hitPlane); // Perform reflection detection
+                float reflectionWeight = 0.15F - hitPlane.roughness/3.3333F; // Scaling clarity to roughness
                 float baseWeight = 1 - reflectionWeight;
                 totalColor[0] = totalColor[0] * baseWeight + relectColor[0] * reflectionWeight;
                 totalColor[1] = totalColor[1] * baseWeight + relectColor[1] * reflectionWeight;
                 totalColor[2] = totalColor[2] * baseWeight + relectColor[2] * reflectionWeight;
             }
+            // Gamma correction
             totalColor[0] = (float) pow(1.0F - exp(totalColor[0] * -1.4F), 0.8333333333333333F);
             totalColor[1] = (float) pow(1.0F - exp(totalColor[1] * -1.4F), 0.8333333333333333F);
             totalColor[2] = (float) pow(1.0F - exp(totalColor[2] * -1.4F), 0.8333333333333333F);
+            // Clamping values
             if(totalColor[0] > 1.0F) {
                 totalColor[0] = 1.0F;
             }
@@ -213,15 +241,15 @@ public class Camera {
             if(totalColor[2] > 1.0F) {
                 totalColor[2] = 1.0F;
             }
-            newColor = new int[]{round(totalColor[0]*255), round(totalColor[1]*255), round(totalColor[2]*255)};
+            newColor = new int[]{round(totalColor[0]*255), round(totalColor[1]*255), round(totalColor[2]*255)}; // return color
         }
         else {
-            newColor = new int[]{round(pixelColor[0] * 255), round(pixelColor[1] * 255), round(pixelColor[2] * 255)};
+            newColor = new int[]{round(pixelColor[0] * 255), round(pixelColor[1] * 255), round(pixelColor[2] * 255)}; // return color (nothing hit)
         }
         hitPlanes.put(hitPlane, newColor);
         return newColor;
     }
-
+    
     public int[][][] simpleCapture(Body[] visibleBodies){
         int[][][] newCapture = new int[this.pixelsX][this.pixelsY][3];
         for(int x = 0; x < this.pixelsX; x++){
