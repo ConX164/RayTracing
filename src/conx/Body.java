@@ -51,12 +51,22 @@ public class Body {
         return this;
     }
     public Body setRoughness(float roughness){
-        float specular = 4F / (float) pow(roughness, 2.3);
+        float fraction = (roughness-1.184F)/0.093F;
+        float specular = (float)exp(0.0387F*fraction*fraction);//4F / (float) pow(roughness, 2.3);
         int modifier = 0;//(int)((/*-0.62996*cbrt(roughness - 0.5) + 0.5*/0) * rayHemisphere.divisions) * (rayHemisphere.divisions * 4);
         for(Plane plane : this.surfaces){
             plane.specular = specular;
             plane.occlusionModifier = modifier;
             plane.roughness = roughness;
+        }
+        return this;
+    }
+    public Body setSpecular(float specular){
+        int modifier = 0;//(int)((/*-0.62996*cbrt(roughness - 0.5) + 0.5*/0) * rayHemisphere.divisions) * (rayHemisphere.divisions * 4);
+        for(Plane plane : this.surfaces){
+            plane.specular = specular;
+            plane.occlusionModifier = modifier;
+            //plane.roughness = roughness;
         }
         return this;
     }

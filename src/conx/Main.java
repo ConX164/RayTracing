@@ -75,12 +75,12 @@ public class Main {
          */
         int[] lightColor = new int[]{255,255,255};
         bodyWorld.add(Body.plane(new Vector(0,0,0), 4F, 4F, new int[]{5,255,255}).setRoughness(0.1F));
-        bodyWorld.add(Body.box(new Vector(0F,0F,0.5F), 1,1,1, new int[]{255,100,5}).setRoughness(0.001F));
+        //bodyWorld.add(Body.box(new Vector(0F,0F,0.5F), 1,1,1, new int[]{255,100,5}).setRoughness(0.001F));
         bodyWorld.add(Body.sphere(new Vector(0,1,0.5F), 0.5F, 20, 10, new int[]{255,78,200}).setSmooth().setRoughness(0.1F));
-        bodyWorld.add(Body.cylinder(new Vector(-0.6F,-1.3F,0.4F), 0.4F, 0.8F, 20, new int[]{200,78,255}).setSmooth().setRoughness(0.5F));
-        bodyWorld.add(Body.cone(new Vector(-1F,1F,0.5F), 0.5F, 1F, 20, new int[]{100,87,255}).setSmooth().setRoughness(0.1F));
+        //bodyWorld.add(Body.cylinder(new Vector(-0.6F,-1.3F,0.4F), 0.4F, 0.8F, 20, new int[]{200,78,255}).setSmooth().setRoughness(0.5F));
+        //bodyWorld.add(Body.cone(new Vector(-1F,1F,0.5F), 0.5F, 1F, 20, new int[]{100,87,255}).setSmooth().setRoughness(0.1F));
         bodyWorld.add(Body.torus(new Vector(-1.4F,-0.2F,0.2F), 0.28F, 0.18F,  24, 10, new int[]{140,255,19}).setSmooth().setRoughness(0.1F));
-        bodyWorld.add(Body.importModel("monkey1.obj", new Vector(1.1F, -1.1F, 0.4F), new int[]{120,120,200}, 0.6F, 0, -35, 165).setSmooth().setRoughness(0.1F));
+        //bodyWorld.add(Body.importModel("monkey1.obj", new Vector(1.1F, -1.1F, 0.4F), new int[]{120,120,200}, 0.6F, 0, -35, 165).setSmooth().setRoughness(0.1F));
         //bodyWorld.add(Body.importModel("HousePlan.obj", new Vector(0, 0, 0), new int[]{120,120,200}, 90, 0, 180).setRoughness(1F));
         //bodyWorld.add(Body.plane(new Vector(0,0,0), 4F, 4F, new int[]{5,255,255}));
         //bodyWorld.add(Body.box(new Vector(0F,0F,0.5F), 1,1,1, new int[]{255,100,5}));

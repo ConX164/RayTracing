@@ -208,10 +208,12 @@ public class Camera {
             //}
             float iorMult = hitPlane.iorTotal(this.iorLevel); // Temporary variable call for gloss properties
             for(Light light : lightList){ // Start light/shadow detection
-                float multiplier = light.illumination(hitPoint,hitPlane,bodyList,rayVector); // Detect lighting
+                float[] data = light.illuminationComplex(hitPoint,hitPlane,bodyList,rayVector); // Detect lighting
                 Vector reflection = Vector.add(rayVector.unit(), (Vector.multiply(planeNorm, -2F*Vector.dot(planeNorm, rayVector.unit())))); // Create reflection ray
-                float specular = iorMult * multiplier * (float) pow(max(Vector.dot(reflection, Vector.subtract(hitPoint, light.origin).unit()), 0), hitPlane.specular); // Calculate specular
-                colorCasts.add(new float[]{light.color[0]*(multiplier*hitPlane.color[0] + specular), light.color[1]*(multiplier*hitPlane.color[1] + specular), light.color[2]*(multiplier*hitPlane.color[2] + specular)}); // Combine lighting
+                Vector mainLight = Vector.subtract(hitPoint, light.origin);
+                float specularFactor = max(Vector.dot(reflection.unit(), mainLight.unit()) + 1F - (float)(sqrt(mainLight.magnitude()*mainLight.magnitude() - light.radius*light.radius)/mainLight.magnitude()), 0);
+                float specular =  data[0] * min(iorMult * (float) pow(specularFactor, hitPlane.specular), 1F); // Calculate specular
+                colorCasts.add(new float[]{light.color[0] * (data[0] * hitPlane.color[0] + specular), light.color[1] * (data[0] * hitPlane.color[1] + specular), light.color[2] * (data[0] * hitPlane.color[2] + specular)}); // Combine lighting
             }
             colorCasts.add(new float[]{hitPlane.color[0] * occlusionMult, hitPlane.color[1] * occlusionMult, hitPlane.color[2] * occlusionMult}); // Add AO
             for(float[] color : colorCasts){ // Combine all effects

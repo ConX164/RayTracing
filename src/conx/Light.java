@@ -92,4 +92,40 @@ public class Light {
         }
         return (this.strength * visibility) / (mainRay.magnitude() * mainRay.magnitude() * this.amount);
     }
+    public float[] illuminationComplex(Vector point, Plane parentPlane, Body[] bodyList, Vector cameraRay){
+        float visibility = 0F;
+        float clarity = 0F;
+        Vector mainRay = Vector.subtract(this.origin, point);
+        Vector v1 = Vector.cross(mainRay, cameraRay).unit();
+        Vector v2 = Vector.cross(mainRay, v1).unit();
+        outerLoop:
+        for(float[] source : this.lightGrids[rand.nextInt(0, variations)]){
+            Vector circlePoint = Vector.add(origin,Vector.add(Vector.multiply(v1,source[0]), Vector.multiply(v2,source[1])));
+            Vector lightRay = Vector.subtract(point, circlePoint);
+            for(Body body : bodyList){
+                if (Vector.shortDistance(lightRay, circlePoint, body.origin) <= body.boundingRadius + 0.000001F) {
+                    for(Plane[] planeList : body.planeChunks.keySet()){
+                        float[] data = body.planeChunks.get(planeList);
+                        Vector center = new Vector(data[0], data[1], data[2]);
+                        if (Vector.shortDistance(lightRay, circlePoint, center) <= data[3] + 0.000001F) {
+                            for (Plane plane : planeList) {
+                                if (plane != parentPlane) {
+                                    if ((body == parentPlane.parent) && (plane.n0 != null) && (-Vector.dot(plane.nAvg, lightRay) > 0)) {
+                                        continue;
+                                    }
+                                    if (plane.linearIntersect(point, lightRay) >= 0.000001F) {
+                                        continue outerLoop;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    //}
+                }
+            }
+            visibility += -Vector.dot(lightRay.unit(), parentPlane.correctedNormal(cameraRay, point).unit());
+            clarity += 1F;
+        }
+        return new float[]{(this.strength * visibility) / (mainRay.magnitude() * mainRay.magnitude() * this.amount), clarity/this.amount};
+    }
 }
